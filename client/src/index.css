@@ -1,0 +1,289 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css');
+@import url('https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(210, 40%, 98%);
+  --foreground: hsl(222.2, 84%, 4.9%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(222.2, 84%, 4.9%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(222.2, 84%, 4.9%);
+  --primary: hsl(214, 84%, 40%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(210, 40%, 96%);
+  --secondary-foreground: hsl(222.2, 47.4%, 11.2%);
+  --muted: hsl(210, 40%, 96%);
+  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
+  --accent: hsl(210, 40%, 96%);
+  --accent-foreground: hsl(222.2, 47.4%, 11.2%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(214.3, 31.8%, 91.4%);
+  --input: hsl(214.3, 31.8%, 91.4%);
+  --ring: hsl(214, 84%, 40%);
+  --radius: 0.5rem;
+  --chart-1: hsl(12, 76%, 61%);
+  --chart-2: hsl(173, 58%, 39%);
+  --chart-3: hsl(197, 37%, 24%);
+  --chart-4: hsl(43, 74%, 66%);
+  --chart-5: hsl(27, 87%, 67%);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --shadow-2xs: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00), 0px 1px 2px -1px hsl(214, 84%, 40% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00), 0px 1px 2px -1px hsl(214, 84%, 40% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00), 0px 2px 4px -1px hsl(214, 84%, 40% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00), 0px 4px 6px -1px hsl(214, 84%, 40% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00), 0px 8px 10px -1px hsl(214, 84%, 40% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(214, 84%, 40% / 0.00);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: hsl(0, 0%, 0%);
+  --foreground: hsl(200, 6.6667%, 91.1765%);
+  --card: hsl(228, 9.8039%, 10%);
+  --card-foreground: hsl(0, 0%, 85.0980%);
+  --popover: hsl(0, 0%, 0%);
+  --popover-foreground: hsl(200, 6.6667%, 91.1765%);
+  --primary: hsl(214, 84%, 50%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(195, 15.3846%, 94.9020%);
+  --secondary-foreground: hsl(210, 25%, 7.8431%);
+  --muted: hsl(0, 0%, 9.4118%);
+  --muted-foreground: hsl(210, 3.3898%, 46.2745%);
+  --accent: hsl(228, 9.8039%, 15%);
+  --accent-foreground: hsl(214, 84%, 50%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(210, 5.2632%, 14.9020%);
+  --input: hsl(207.6923, 27.6596%, 18.4314%);
+  --ring: hsl(214, 84%, 40%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+}
+
+.sidebar {
+  background-color: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  height: 100vh;
+  position: fixed;
+  width: 280px;
+  overflow-y: auto;
+}
+
+.main-content {
+  margin-left: 280px;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.status-active { 
+  background-color: hsl(var(--chart-2)); 
+}
+
+.status-inactive { 
+  background-color: hsl(var(--muted-foreground)); 
+}
+
+.status-error { 
+  background-color: hsl(var(--destructive)); 
+}
+
+.status-warning { 
+  background-color: hsl(var(--chart-4)); 
+}
+
+.metric-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.nav-link {
+  color: hsl(var(--muted-foreground));
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  margin: 0.25rem 0;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.nav-link:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  text-decoration: none;
+}
+
+.nav-link.active {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+    z-index: 1000;
+  }
+  
+  .sidebar.show {
+    transform: translateX(0);
+  }
+  
+  .main-content {
+    margin-left: 0;
+  }
+}
+
+/* Bootstrap and DaisyUI integration */
+.btn {
+  @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors;
+}
+
+.btn-primary {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+}
+
+.btn-primary:hover {
+  background-color: hsl(var(--primary) / 0.9);
+  border-color: hsl(var(--primary) / 0.9);
+}
+
+.btn-outline-primary {
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary));
+  background-color: transparent;
+}
+
+.btn-outline-primary:hover {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.btn-secondary {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--secondary));
+}
+
+.btn-outline-secondary {
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  background-color: transparent;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2 py-1 text-xs font-medium;
+}
+
+.badge-success {
+  background-color: hsl(var(--chart-2) / 0.1);
+  color: hsl(var(--chart-2));
+}
+
+.badge-warning {
+  background-color: hsl(var(--chart-4) / 0.1);
+  color: hsl(var(--chart-4));
+}
+
+.badge-danger {
+  background-color: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}
+
+.badge-primary {
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+
+.badge-secondary {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.progress {
+  background-color: hsl(var(--muted));
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.progress-bar {
+  background-color: hsl(var(--primary));
+  transition: width 0.3s ease;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.table th {
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.table-hover tbody tr:hover {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.alert {
+  @apply rounded-lg border p-4;
+}
+
+.alert-info {
+  background-color: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+.form-control {
+  @apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm;
+}
+
+.form-control:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.form-label {
+  @apply text-sm font-medium leading-none;
+}
