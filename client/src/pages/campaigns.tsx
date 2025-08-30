@@ -89,18 +89,21 @@ export default function Campaigns() {
   };
 
   const calculateProgress = (campaign: Campaign) => {
-    if (campaign.totalLeads === 0) return 0;
-    return Math.round((campaign.sentCount / campaign.totalLeads) * 100);
+    if (!campaign.totalLeads || campaign.totalLeads === 0) return 0;
+    const sentCount = campaign.sentCount || 0;
+    return Math.round((sentCount / campaign.totalLeads) * 100);
   };
 
   const calculateOpenRate = (campaign: Campaign) => {
-    if (campaign.sentCount === 0) return 0;
-    return Math.round((campaign.openCount / campaign.sentCount) * 100 * 10) / 10;
+    if (!campaign.sentCount || campaign.sentCount === 0) return 0;
+    const openCount = campaign.openCount || 0;
+    return Math.round((openCount / campaign.sentCount) * 100 * 10) / 10;
   };
 
   const calculateReplyRate = (campaign: Campaign) => {
-    if (campaign.sentCount === 0) return 0;
-    return Math.round((campaign.replyCount / campaign.sentCount) * 100 * 10) / 10;
+    if (!campaign.sentCount || campaign.sentCount === 0) return 0;
+    const replyCount = campaign.replyCount || 0;
+    return Math.round((replyCount / campaign.sentCount) * 100 * 10) / 10;
   };
 
   const handleDelete = (campaign: Campaign) => {

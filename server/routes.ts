@@ -113,13 +113,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const account = await storage.createEmailAccount({
         ...accountData,
         userId: req.session.userId!,
-        encryptedPassword,
+        encryptedPassword
+      });
+
+      // Update account with test results
+      const updatedAccount = await storage.updateEmailAccount(account.id, {
         status: testResult.success ? 'active' : 'error',
         errorMessage: testResult.error,
         lastTested: new Date()
       });
 
-      res.json(account);
+      res.json(updatedAccount);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create email account' });
     }
@@ -325,6 +329,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Campaign actions
+  app.post('/api/campaigns/:id/start', requireAuth, async (req, res) => {
+    try {
+      const campaign = await storage.updateCampaign(req.params.id, {
+        status: 'active',
+        startedAt: new Date()
+      });
+      res.json(campaign);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to start campaign' });
+    }
+  });
+
+  app.post('/api/campaigns/:id/pause', requireAuth, async (req, res) => {
+    try {
+      const campaign = await storage.updateCampaign(req.params.id, {
+        status: 'paused'
+      });
+      res.json(campaign);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to pause campaign' });
+    }
+  });
+
+  app.post('/api/campaigns/:id/stop', requireAuth, async (req, res) => {
+    try {
+      const campaign = await storage.updateCampaign(req.params.id, {
+        status: 'completed',
+        completedAt: new Date()
+      });
+      res.json(campaign);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to stop campaign' });
+    }
+  });
+
+  // Get campaign emails
+  app.get('/api/campaigns/:id/emails', requireAuth, async (req, res) => {
+    try {
+      const emails = await storage.getCampaignEmails(req.params.id);
+      res.json(emails);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get campaign emails' });
+    }
+  });
+
   // Inbox
   app.get('/api/inbox', requireAuth, async (req, res) => {
     try {
@@ -341,6 +391,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: 'Message marked as read' });
     } catch (error) {
       res.status(500).json({ message: 'Failed to mark message as read' });
+    }
+  });
+
+  // Sync inbox from email accounts
+  app.post('/api/inbox/sync', requireAuth, async (req, res) => {
+    try {
+      const accounts = await storage.getEmailAccounts(req.session.userId!);
+      const results = [];
+
+      for (const account of accounts) {
+        if (account.isActive && account.status === 'active') {
+          try {
+            const password = emailService.decryptPassword(account.encryptedPassword);
+            const result = await emailService.checkInboxMessages({
+              imapHost: account.imapHost,
+              imapPort: account.imapPort,
+              username: account.username,
+              password
+            });
+
+            if (result.success && result.messages) {
+              // Process and store new messages
+              for (const message of result.messages) {
+                const headers = message.parts?.find((p: any) => p.which === 'HEADER')?.body;
+                if (headers) {
+                  await storage.createInboxMessage({
+                    userId: req.session.userId!,
+                    emailAccountId: account.id,
+                    fromEmail: headers.from?.[0] || 'unknown',
+                    fromName: headers.from?.[0]?.split('<')[0]?.trim() || null,
+                    subject: headers.subject?.[0] || 'No Subject',
+                    body: 'Message body', // Would parse actual body in real implementation
+                    messageId: headers['message-id']?.[0] || `msg-${Date.now()}`,
+                    threadId: headers['thread-id']?.[0] || null,
+                    receivedAt: headers.date?.[0] ? new Date(headers.date[0]) : new Date()
+                  });
+                }
+              }
+            }
+
+            results.push({ accountId: account.id, success: result.success, messageCount: result.messages?.length || 0 });
+          } catch (error) {
+            results.push({ accountId: account.id, success: false, error: error instanceof Error ? error.message : 'Sync failed' });
+          }
+        }
+      }
+
+      res.json({ results });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to sync inbox' });
     }
   });
 
@@ -366,6 +466,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Domain reputation check failed' });
+    }
+  });
+
+  // Email template validation
+  app.post('/api/templates/validate', requireAuth, async (req, res) => {
+    try {
+      const { template } = req.body;
+      const result = emailService.validateEmailTemplate(template);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: 'Template validation failed' });
+    }
+  });
+
+  // Test email sending
+  app.post('/api/email/test-send', requireAuth, async (req, res) => {
+    try {
+      const { emailAccountId, to, subject, body } = req.body;
+      
+      const account = await storage.getEmailAccount(emailAccountId);
+      if (!account) {
+        return res.status(404).json({ message: 'Email account not found' });
+      }
+
+      const password = emailService.decryptPassword(account.encryptedPassword);
+      const result = await emailService.sendEmail({
+        smtpHost: account.smtpHost,
+        smtpPort: account.smtpPort,
+        username: account.username,
+        password,
+        to,
+        subject,
+        body,
+        fromName: account.name
+      });
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Test email failed' });
     }
   });
 

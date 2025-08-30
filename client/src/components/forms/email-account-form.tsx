@@ -299,7 +299,8 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   type="number" 
                   placeholder="50" 
                   data-testid="input-daily-limit"
-                  {...field} 
+                  {...field}
+                  value={field.value ?? ""}
                   onChange={(e) => field.onChange(Number(e.target.value))}
                 />
               </FormControl>

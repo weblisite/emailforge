@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import nodemailer from 'nodemailer';
+import * as imaps from 'imap-simple';
 
 export class EmailService {
   private encryptionKey: string;
@@ -41,15 +43,30 @@ export class EmailService {
     password: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      // In a real implementation, this would test the actual SMTP connection
-      // For now, we'll simulate a connection test
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       // Basic validation
       if (!config.smtpHost || !config.username || !config.password) {
         return { success: false, error: 'Missing required configuration' };
       }
-      
+
+      // Test SMTP connection with nodemailer
+      const transporter = nodemailer.createTransporter({
+        host: config.smtpHost,
+        port: config.smtpPort,
+        secure: config.smtpPort === 465,
+        auth: {
+          user: config.username,
+          pass: config.password,
+        },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 5000,
+        socketTimeout: 10000
+      });
+
+      // Verify connection
+      await transporter.verify();
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Connection failed' };
@@ -64,15 +81,32 @@ export class EmailService {
     to: string;
     subject: string;
     body: string;
+    fromName?: string;
   }): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      // In a real implementation, this would use nodemailer or similar
-      // For now, we'll simulate email sending
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const messageId = `<${Date.now()}.${Math.random().toString(36).substr(2, 9)}@${config.smtpHost}>`;
-      
-      return { success: true, messageId };
+      const transporter = nodemailer.createTransporter({
+        host: config.smtpHost,
+        port: config.smtpPort,
+        secure: config.smtpPort === 465,
+        auth: {
+          user: config.username,
+          pass: config.password,
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+
+      const mailOptions = {
+        from: config.fromName ? `${config.fromName} <${config.username}>` : config.username,
+        to: config.to,
+        subject: config.subject,
+        html: config.body,
+        text: config.body.replace(/<[^>]*>/g, ''), // Strip HTML for text version
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      return { success: true, messageId: info.messageId };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Send failed' };
     }
@@ -85,6 +119,109 @@ export class EmailService {
       result = result.replace(regex, value || '');
     }
     return result;
+  }
+
+  async testImapConnection(config: {
+    imapHost: string;
+    imapPort: number;
+    username: string;
+    password: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const connection = await imaps.connect({
+        imap: {
+          user: config.username,
+          password: config.password,
+          host: config.imapHost,
+          port: config.imapPort,
+          tls: config.imapPort === 993,
+          authTimeout: 10000,
+          connTimeout: 10000,
+          tlsOptions: { rejectUnauthorized: false }
+        }
+      });
+      
+      await connection.end();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'IMAP connection failed' };
+    }
+  }
+
+  async checkInboxMessages(config: {
+    imapHost: string;
+    imapPort: number;
+    username: string;
+    password: string;
+  }): Promise<{ success: boolean; messages?: any[]; error?: string }> {
+    try {
+      const connection = await imaps.connect({
+        imap: {
+          user: config.username,
+          password: config.password,
+          host: config.imapHost,
+          port: config.imapPort,
+          tls: config.imapPort === 993,
+          authTimeout: 10000,
+          connTimeout: 10000,
+          tlsOptions: { rejectUnauthorized: false }
+        }
+      });
+
+      await connection.openBox('INBOX');
+      const searchCriteria = ['UNSEEN'];
+      const fetchOptions = {
+        bodies: 'HEADER.FIELDS (FROM TO SUBJECT DATE)',
+        markSeen: false,
+        struct: true
+      };
+
+      const messages = await connection.search(searchCriteria, fetchOptions);
+      await connection.end();
+
+      return { success: true, messages };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to check inbox' };
+    }
+  }
+
+  generateBoundaryId(): string {
+    return Math.random().toString(36).substr(2, 9);
+  }
+
+  validateEmailTemplate(template: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Check for balanced merge tags
+    const mergeTagPattern = /{{(\w+)}}/g;
+    const matches = template.match(mergeTagPattern);
+    
+    if (matches) {
+      const invalidTags = matches.filter(tag => {
+        const tagName = tag.slice(2, -2);
+        return !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tagName);
+      });
+      
+      if (invalidTags.length > 0) {
+        errors.push(`Invalid merge tags: ${invalidTags.join(', ')}`);
+      }
+    }
+    
+    // Check for basic HTML validity if it contains HTML
+    if (template.includes('<') && template.includes('>')) {
+      const htmlPattern = /<[^>]+>/g;
+      const htmlTags = template.match(htmlPattern);
+      if (htmlTags) {
+        const openTags = htmlTags.filter(tag => !tag.startsWith('</') && !tag.endsWith('/>'));
+        const closeTags = htmlTags.filter(tag => tag.startsWith('</'));
+        
+        if (openTags.length !== closeTags.length) {
+          errors.push('Unbalanced HTML tags detected');
+        }
+      }
+    }
+    
+    return { valid: errors.length === 0, errors };
   }
 }
 

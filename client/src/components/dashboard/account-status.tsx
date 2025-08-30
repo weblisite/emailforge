@@ -46,7 +46,7 @@ export default function AccountStatus({ accounts }: AccountStatusProps) {
       
       <div className="space-y-3">
         {accounts.slice(0, 4).map((account) => {
-          const statusInfo = getStatusBadge(account.status);
+          const statusInfo = getStatusBadge(account.status || 'pending');
           return (
             <div 
               key={account.id} 
@@ -62,7 +62,7 @@ export default function AccountStatus({ accounts }: AccountStatusProps) {
                 </div>
               </div>
               <div className="d-flex align-items-center">
-                <span className={`status-indicator ${getStatusIndicator(account.status)}`}></span>
+                <span className={`status-indicator ${getStatusIndicator(account.status || 'pending')}`}></span>
                 <Badge className={statusInfo.className}>
                   {statusInfo.text}
                 </Badge>

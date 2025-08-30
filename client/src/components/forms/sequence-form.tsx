@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { Plus, Trash2 } from "lucide-react";
-import type { z } from "zod";
+import { z } from "zod";
 
 type SequenceFormData = z.infer<typeof insertSequenceSchema> & {
   steps: Array<{
@@ -242,7 +242,7 @@ export default function SequenceForm({ onSuccess, onCancel }: SequenceFormProps)
                       </FormControl>
                       <FormMessage />
                       <p className="text-sm text-muted-foreground">
-                        Use merge tags: {{name}}, {{company}}, {{email}}, {{title}}
+                        Use merge tags: {`{{name}}, {{company}}, {{email}}, {{title}}`}
                       </p>
                     </FormItem>
                   )}
