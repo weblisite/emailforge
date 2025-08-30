@@ -1,0 +1,203 @@
+# EmailForge MVP Development TODO
+
+## Phase 1: Project Setup & Configuration (Week 1-2)
+
+### 1.1 Project Structure Setup
+- [x] Create PRD.md documentation
+- [x] Create TODO.md development guide
+- [x] Initialize project directory structure
+- [x] Create requirements.txt with all dependencies
+- [x] Set up .gitignore and README.md
+- [x] Create environment configuration files
+
+### 1.2 Database & ORM Setup
+- [x] Set up Neon PostgreSQL database
+- [x] Install and configure Drizzle ORM
+- [x] Define database schemas (users, accounts, leads, sequences, campaigns)
+- [ ] Create database migration scripts
+- [x] Set up connection pooling
+
+### 1.3 Authentication Setup
+- [x] Set up Clerk authentication service
+- [x] Configure JWT verification middleware
+- [x] Create user management endpoints
+- [x] Set up protected routes
+
+### 1.4 External Services Configuration
+- [ ] Set up Mailtrap API integration for deliverability testing
+- [ ] Configure Redis for Celery task queue
+- [ ] Set up environment variables for all services
+
+## Phase 2: Backend Development (Week 3-4)
+
+### 2.1 Core API Development
+- [x] Create Flask application structure
+- [x] Implement user authentication endpoints
+- [x] Build email account management APIs (CRUD operations)
+- [x] Create lead management endpoints
+- [x] Build sequence builder API
+- [x] Implement campaign management endpoints
+
+### 2.2 Email Functionality
+- [ ] Implement SMTP connection and email sending
+- [ ] Create IMAP connection for inbox monitoring
+- [ ] Build email rotation logic
+- [ ] Implement rate limiting per account
+- [ ] Add email template personalization (merge tags)
+
+### 2.3 Task Queue & Background Jobs
+- [x] Set up Celery with Redis
+- [x] Create email sending tasks
+- [x] Implement IMAP polling tasks
+- [x] Build deliverability testing tasks
+- [x] Add task monitoring and error handling
+
+### 2.4 Security & Encryption
+- [ ] Implement Fernet encryption for email credentials
+- [ ] Add input validation and sanitization
+- [ ] Implement rate limiting and abuse prevention
+- [ ] Add audit logging for sensitive operations
+
+## Phase 3: Frontend Development (Week 5-6)
+
+### 3.1 React Application Setup
+- [x] Initialize React application with Vite
+- [x] Set up routing with React Router
+- [x] Configure Clerk SDK integration
+- [x] Set up Bootstrap and Daisy UI styling
+
+### 3.2 Core Components
+- [x] Create authentication components (login/signup)
+- [x] Build dashboard layout and navigation
+- [x] Implement email account management UI
+- [x] Create lead upload and management interface
+- [x] Build sequence builder form
+- [x] Design campaign management dashboard
+
+### 3.3 Advanced UI Features
+- [x] Create unified inbox interface
+- [x] Build analytics dashboard with charts
+- [x] Implement real-time updates
+- [x] Add responsive design for mobile
+- [x] Create loading states and error handling
+
+### 3.4 API Integration
+- [x] Set up API client with authentication
+- [x] Implement real-time data fetching
+- [x] Add optimistic updates for better UX
+- [x] Handle API errors gracefully
+
+## Phase 4: Testing & Integration (Week 7)
+
+### 4.1 Unit Testing
+- [ ] Write tests for backend API endpoints
+- [ ] Test email functionality with mocks
+- [ ] Test encryption and security features
+- [ ] Test task queue operations
+
+### 4.2 Integration Testing
+- [ ] Test complete user workflows
+- [ ] Test email sending and receiving
+- [ ] Test deliverability testing integration
+- [ ] Test error handling and edge cases
+
+### 4.3 Performance Testing
+- [ ] Load test with multiple concurrent users
+- [ ] Test email sending performance
+- [ ] Monitor database query performance
+- [ ] Test task queue scalability
+
+## Phase 5: Deployment & Beta Launch (Week 8)
+
+### 5.1 Render Deployment
+- [ ] Deploy backend to Render Web Service
+- [ ] Deploy frontend to Render Static Site
+- [ ] Configure environment variables
+- [ ] Set up monitoring and logging
+
+### 5.2 Production Configuration
+- [ ] Configure production database
+- [ ] Set up SSL certificates
+- [ ] Configure domain and DNS
+- [ ] Set up backup and monitoring
+
+### 5.3 Beta Testing
+- [ ] Deploy to beta environment
+- [ ] Conduct user acceptance testing
+- [ ] Fix critical bugs and issues
+- [ ] Gather user feedback
+
+## Technical Implementation Details
+
+### Database Schema
+- Users table (id, email, created_at, updated_at)
+- Email accounts table (id, user_id, provider, smtp_host, smtp_port, username, encrypted_password, imap_host, imap_port, is_active)
+- Leads table (id, user_id, name, email, company, status, created_at)
+- Sequences table (id, user_id, name, description, created_at)
+- Sequence steps table (id, sequence_id, step_number, subject, body, delay_days)
+- Campaigns table (id, user_id, sequence_id, name, status, created_at, started_at)
+- Campaign emails table (id, campaign_id, lead_id, email_account_id, status, sent_at, opened_at, replied_at)
+
+### Key Features to Implement
+1. **Email Account Rotation**: Automatically rotate through active email accounts
+2. **Rate Limiting**: Configurable limits per account (default: 50 emails/hour)
+3. **Deliverability Testing**: Pre-send spam score and blacklist checks
+4. **Unified Inbox**: Monitor all connected email accounts for replies
+5. **CSV Import**: Bulk lead upload with validation
+6. **Merge Tags**: Personalization using {{name}}, {{company}}, etc.
+7. **Sequence Builder**: Visual interface for creating email sequences
+8. **Campaign Analytics**: Track opens, replies, bounces in real-time
+
+### Security Considerations
+- Encrypt all email credentials using Fernet
+- Implement JWT-based authentication
+- Add rate limiting to prevent abuse
+- Validate all user inputs
+- Log all sensitive operations
+- Support GDPR compliance features
+
+### Performance Optimizations
+- Use connection pooling for database
+- Implement caching for frequently accessed data
+- Queue long-running tasks (email sending, IMAP polling)
+- Use efficient database queries with proper indexing
+- Implement pagination for large datasets
+
+## Dependencies
+
+### Backend
+- Flask (web framework)
+- Drizzle ORM (database ORM)
+- Celery (task queue)
+- Redis (message broker)
+- cryptography (encryption)
+- psycopg2-binary (PostgreSQL adapter)
+- python-dotenv (environment variables)
+- requests (HTTP client for APIs)
+
+### Frontend
+- React 18
+- React Router (routing)
+- Clerk SDK (authentication)
+- Bootstrap 5 (styling)
+- Daisy UI (component library)
+- Axios (HTTP client)
+- React Query (data fetching)
+
+### Infrastructure
+- Neon (PostgreSQL database)
+- Clerk (authentication service)
+- Mailtrap (deliverability testing)
+- Render (deployment platform)
+- Redis (task queue)
+
+## Success Criteria
+- [ ] All core features implemented and working
+- [ ] Application successfully deployed on Render
+- [ ] Database schemas properly configured
+- [ ] Authentication system fully functional
+- [ ] Email sending and receiving working correctly
+- [ ] Task queue system operational
+- [ ] Frontend responsive and user-friendly
+- [ ] Basic testing completed
+- [ ] Ready for beta user testing

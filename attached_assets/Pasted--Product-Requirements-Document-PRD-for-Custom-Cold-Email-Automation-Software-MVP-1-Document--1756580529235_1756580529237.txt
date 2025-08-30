@@ -1,0 +1,248 @@
+# Product Requirements Document (PRD) for Custom Cold Email Automation Software MVP
+
+## 1. Document Information
+
+**Product Name:** Custom Cold Email Automation Software (referred to as "EmailForge" for brevity)  
+**Version:** 1.0 (MVP)  
+**Date:** August 30, 2025  
+**Author:** Grok AI (based on user specifications and development discussions)  
+**Stakeholders:** Product Owner (User), Development Team, Potential Users (e.g., sales teams, marketers)
+
+**Change History:**
+- v1.0: Initial draft based on MVP requirements (August 30, 2025)
+
+**Approval Status:** Draft – Pending review and approval
+
+This PRD serves as the single source of truth for the development of EmailForge, a SaaS-like cold email outreach and automation tool. It outlines the product's purpose, features, technical requirements, and scope to guide engineering, design, and deployment efforts. The document is living and should be updated as needed during development.
+
+## 2. Overview and Purpose
+
+### 2.1 Product Description
+EmailForge is an AI-powered cold email automation platform designed for B2B sales teams, marketers, lead generation agencies, and solopreneurs. It enables scalable outbound email campaigns with high deliverability, focusing on automation, personalization, and multi-account management. Unlike off-the-shelf tools like Smartlead, this custom MVP emphasizes unlimited email accounts, unlimited outreach volume (with practical safeguards), and advanced deliverability testing.
+
+The platform addresses pain points in cold emailing, such as spam filters, account bans, and manual management, by providing a unified interface for connecting custom SMTP/IMAP accounts, building sequences, sending campaigns, and monitoring replies.
+
+### 2.2 Product Vision
+To create a robust, developer-friendly cold email automation tool that prioritizes deliverability, scalability, and ease of use, enabling users to run high-volume campaigns without risking domain reputation or compliance issues. In the long term, EmailForge aims to evolve into a full-featured SaaS product with AI enhancements and multi-channel support.
+
+### 2.3 Problem Statement
+Users face challenges with existing tools:
+- Limited account connections leading to deliverability issues.
+- High costs for scaling outreach.
+- Poor integration with custom email providers.
+- Inadequate testing for spam and blacklisting.
+
+EmailForge solves this by offering unlimited SMTP/IMAP integrations, automated rotation, and built-in deliverability checks, all deployed on a modern stack for reliability.
+
+### 2.4 Business Goals
+- Validate MVP with 10-50 users in beta.
+- Achieve 50-60% open rates in test campaigns.
+- Reduce development time by using specified tech stack (Neon, Drizzle ORM, Clerk, etc.).
+- Ensure compliance with email laws (CAN-SPAM, GDPR) to minimize legal risks.
+
+## 3. Target Audience and Personas
+
+### 3.1 Target Users
+- **Primary:** Solopreneurs and small sales teams needing affordable, scalable cold email tools.
+- **Secondary:** Agencies managing multiple clients' campaigns.
+- **Tertiary:** Developers or tech-savvy users building custom workflows.
+
+### 3.2 User Personas
+
+**Solo Marketer (Alex):**
+- Demographics: 25-35 years old, freelance marketer.
+- Needs: Quick setup for 1-5 email accounts, simple sequences, basic analytics.
+- Pain Points: Time-consuming manual sends, fear of spam flags.
+- Goals: Send 1,000 emails/month with high deliverability.
+
+**Agency Owner (Jordan):**
+- Demographics: 35-45 years old, runs a lead gen agency.
+- Needs: Unlimited accounts, client-specific dashboards, advanced testing.
+- Pain Points: Managing multiple domains, tracking replies across inboxes.
+- Goals: Scale to 100,000+ emails/month without bans.
+
+**Developer User (Taylor):**
+- Demographics: 20-30 years old, software engineer.
+- Needs: API access, custom integrations, easy deployment.
+- Pain Points: Rigid tools lacking extensibility.
+- Goals: Customize and deploy on Render for personal use.
+
+## 4. Success Metrics and KPIs
+
+- **Acquisition Metrics:** 100 sign-ups in first 3 months post-launch.
+- **Engagement Metrics:** Average 50 campaigns/user/month; 40% reply rate in tests.
+- **Performance Metrics:** 99% uptime; <5% bounce rate; spam score <3/10 via tests.
+- **Business Metrics:** User retention >70% after 30 days; feedback NPS >7/10.
+- **Technical Metrics:** Deployment success on Render; query response time <500ms.
+
+Track via integrated analytics (e.g., Render logs, Neon queries) and user feedback surveys.
+
+## 5. Scope
+
+### 5.1 In Scope (MVP Features)
+- Unlimited SMTP/IMAP account connections (custom providers only, no Gmail).
+- Unlimited outreach (queued sends with rotation to avoid limits).
+- Advanced deliverability tests (spam scoring, blacklist checks via Mailtrap API).
+- CSV lead import and simple email sequence builder with personalization (e.g., merge tags).
+- Unified inbox for replies (IMAP polling).
+- User authentication and management via Clerk.
+- Basic dashboard with Bootstrap and Daisy UI styling.
+
+### 5.2 Out of Scope (Future Releases)
+- Multi-channel outreach (SMS, LinkedIn, etc.).
+- AI-powered personalization (e.g., OpenAI integration).
+- Built-in lead database or scraping.
+- White-labeling for agencies.
+- Mobile app.
+- Advanced analytics (e.g., heatmaps, A/B testing).
+
+## 6. Functional Requirements
+
+### 6.1 Core Features
+
+**User Authentication:**
+- Signup/login via Clerk (JWT-based).
+- Role: Basic user (no advanced roles in MVP).
+
+**Email Account Management:**
+- Add/edit unlimited SMTP/IMAP accounts.
+- Encrypt credentials in Neon DB using Fernet.
+- Validation: Test connection on add.
+
+**Lead Management:**
+- Upload leads via CSV (name, email, company).
+- Store in Neon DB; basic search/filter.
+
+**Sequence Builder:**
+- Create drip sequences (initial + follow-ups).
+- Personalization: Merge tags (e.g., {{name}}).
+- Scheduling: Delay between emails.
+
+**Campaign Sending:**
+- Queue sends via Celery/Redis.
+- Auto-rotate accounts for volume.
+- Pre-send deliverability test (Mailtrap API: spam score, blacklist).
+
+**Inbox Management:**
+- Unified view of replies from all accounts.
+- Poll IMAP periodically (e.g., every 5 mins).
+- Categorize replies (e.g., positive/negative via basic rules).
+
+**Analytics:**
+- Basic dashboard: Sent, opens, replies, bounces.
+- Real-time updates via Neon queries.
+
+### 6.2 User Stories
+- As a user, I want to sign up and log in securely so I can access my dashboard.
+- As a user, I want to add multiple SMTP/IMAP accounts so I can rotate sends.
+- As a user, I want to upload leads and build sequences so I can personalize campaigns.
+- As a user, I want to run deliverability tests before sending so I avoid spam.
+- As a user, I want a unified inbox to view replies without switching apps.
+
+## 7. Non-Functional Requirements
+
+### 7.1 Performance
+- Handle 10,000 emails/day initially (scale via queues).
+- Response time: <2s for UI actions.
+- Uptime: 99% (monitored via Render).
+
+### 7.2 Security
+- Encrypt sensitive data (email creds) in DB.
+- JWT auth for all API endpoints.
+- Compliance: Include unsubscribe links; support CAN-SPAM/GDPR (e.g., data export).
+
+### 7.3 Usability
+- Intuitive UI with Bootstrap grids and Daisy UI components (buttons, tables).
+- Responsive design for desktop/mobile.
+- Accessibility: WCAG 2.1 basics (e.g., alt text, keyboard nav).
+
+### 7.4 Reliability
+- Error handling: Graceful failures (e.g., retry failed sends).
+- Backups: Neon auto-backups.
+
+## 8. Technical Architecture
+
+### 8.1 Tech Stack
+- **Backend:** Python/Flask for API; Celery/Redis for async tasks; smtplib/imaplib for email.
+- **Database:** Neon PostgreSQL with Drizzle ORM (schemas for users, accounts, leads, sequences).
+- **Frontend:** React.js with Clerk SDK; Bootstrap/Daisy UI CDNs for styling.
+- **Auth:** Clerk (JWT verification).
+- **Deliverability:** Mailtrap API integration.
+- **Deployment:** Render (Web Service for backend, Static Site for frontend).
+
+### 8.2 High-Level Architecture
+- **Frontend:** React app calls backend APIs (e.g., /add-account, /send-campaign).
+- **Backend:** Flask handles requests, interacts with Neon via Drizzle, queues sends.
+- **Data Flow:** User → Clerk Auth → React UI → Flask API → Neon DB → SMTP/IMAP.
+
+**Diagrams:** (Note: In production, include wireframes or UML; for now, text-based.)
+User uploads leads → Stored in DB → Sequence built → Queued send → Rotate accounts → Test deliverability → Send.
+
+## 9. UI/UX Design Requirements
+
+**Style Guide:** Bootstrap for layout (containers, tables); Daisy UI for enhanced components (buttons, modals).
+
+**Key Screens:**
+- Login/Signup (Clerk components).
+- Dashboard: Overview, add account button, leads table.
+- Sequence Builder: Form with fields for subject/body, delays.
+- Inbox: Table of replies with filters.
+
+**Wireframes:** Simple, clean design; use placeholders for future AI features.
+
+**User Flow:** Onboard → Add accounts → Upload leads → Build sequence → Test & Send → Monitor inbox.
+
+## 10. Assumptions and Dependencies
+
+### 10.1 Assumptions
+- Users have custom SMTP/IMAP providers (e.g., Zoho) with proper SPF/DKIM setup.
+- Mailtrap API is sufficient for deliverability; no custom IP rotation in MVP.
+- Render free tier handles initial load; scale to paid if needed.
+
+### 10.2 Dependencies
+- **External Services:** Neon, Clerk, Mailtrap, Redis (via Render).
+- **Libraries:** As in requirements.txt (e.g., flask, celery).
+- **Risks:** Provider rate limits; mitigate with queues and rotation.
+
+## 11. Project Timeline and Milestones
+
+- **Phase 1: Setup (Week 1-2):** Configure Neon, Clerk, Render; define schemas with Drizzle.
+- **Phase 2: Backend Development (Week 3-4):** Implement APIs, email handling, queues.
+- **Phase 3: Frontend Development (Week 5-6):** Build React UI, integrate auth and APIs.
+- **Phase 4: Testing & Integration (Week 7):** Unit/integration tests; deploy to Render.
+- **Phase 5: Beta Launch (Week 8):** User testing, fixes.
+
+**Total Timeline:** 8 weeks for MVP.  
+**Resources:** 1-2 developers; tools like Git for version control.
+
+## 12. Testing and QA
+
+- **Unit Tests:** Cover API endpoints, encryption, email sends (use mocks).
+- **Integration Tests:** Full flow (add account → send → inbox).
+- **Manual Tests:** Deliverability with real providers; load test 100 emails.
+
+**Acceptance Criteria:**
+- 100% test coverage for core features.
+- No critical bugs (e.g., credential leaks).
+- Successful deployment on Render.
+
+## 13. Open Issues and Q&A
+
+**Q:** How to handle high-volume sends without bans?  
+**A:** Implement rate limiting (e.g., 50/hour/account); user-configurable.
+
+**Q:** What if Mailtrap API fails?  
+**A:** Fallback to basic sends with warnings.
+
+**Open Issues:**
+- Explore adding warmup logic post-MVP.
+- Confirm Neon scaling for 1M+ records.
+- Potential Clerk pricing for production.
+
+## 14. Appendices
+
+**Glossary:** SMTP (Simple Mail Transfer Protocol), IMAP (Internet Message Access Protocol), MVP (Minimum Viable Product).
+
+**References:** Development guides from conversation history; PRD templates from Aha.io, Product School, and HelpLook.
+
+**Attachments:** Code snippets (e.g., schema.py, app.py); deployment README.

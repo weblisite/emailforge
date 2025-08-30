@@ -1,0 +1,232 @@
+# EmailForge - Custom Cold Email Automation Software MVP
+
+A robust, developer-friendly cold email automation tool that prioritizes deliverability, scalability, and ease of use. Built with modern technologies and designed for B2B sales teams, marketers, and lead generation agencies.
+
+## 🚀 Features
+
+- **Unlimited SMTP/IMAP Account Connections** - Connect unlimited custom email providers
+- **Advanced Deliverability Testing** - Pre-send spam score and blacklist checks via Mailtrap API
+- **Smart Email Rotation** - Automatically rotate through accounts to avoid rate limits
+- **Sequence Builder** - Create personalized drip campaigns with merge tags
+- **Unified Inbox** - Monitor all connected accounts for replies in one place
+- **CSV Lead Import** - Bulk upload leads with validation
+- **Real-time Analytics** - Track opens, replies, bounces, and campaign performance
+- **Secure Authentication** - JWT-based auth via Clerk
+- **Compliance Ready** - Built-in unsubscribe links and GDPR support
+
+## 🛠️ Tech Stack
+
+### Backend
+- **Python 3.11+** with Flask web framework
+- **Drizzle ORM** for database operations
+- **Neon PostgreSQL** for data storage
+- **Celery + Redis** for task queuing
+- **Cryptography** for secure credential storage
+
+### Frontend
+- **React 18** with modern hooks
+- **Bootstrap 5** + **Daisy UI** for styling
+- **Clerk SDK** for authentication
+- **React Router** for navigation
+
+### Infrastructure
+- **Render** for deployment (Web Service + Static Site)
+- **Mailtrap API** for deliverability testing
+- **Redis** for task queue management
+
+## 📋 Prerequisites
+
+- Python 3.11 or higher
+- Node.js 18 or higher
+- PostgreSQL database (Neon recommended)
+- Redis instance
+- Clerk account for authentication
+- Mailtrap account for deliverability testing
+
+## 🚀 Quick Start
+
+### 1. Clone the Repository
+```bash
+git clone <repository-url>
+cd ColdOutreach
+```
+
+### 2. Backend Setup
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run database migrations
+python -m flask db upgrade
+
+# Start the Flask server
+python app.py
+```
+
+### 3. Frontend Setup
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+### 4. Start Background Workers
+```bash
+# Start Celery worker
+celery -A app.celery worker --loglevel=info
+
+# Start Celery beat (for scheduled tasks)
+celery -A app.celery beat --loglevel=info
+```
+
+## ⚙️ Configuration
+
+Create a `.env` file in the root directory:
+
+```env
+# Database
+DATABASE_URL=postgresql://user:password@host:port/database
+
+# Authentication
+CLERK_SECRET_KEY=your_clerk_secret_key
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Mailtrap API
+MAILTRAP_API_TOKEN=your_mailtrap_token
+
+# Encryption
+ENCRYPTION_KEY=your_32_byte_encryption_key
+
+# Flask
+FLASK_SECRET_KEY=your_flask_secret_key
+FLASK_ENV=development
+```
+
+## 🗄️ Database Schema
+
+The application uses the following main tables:
+
+- **users** - User accounts and authentication
+- **email_accounts** - SMTP/IMAP account configurations
+- **leads** - Contact information for outreach
+- **sequences** - Email campaign sequences
+- **sequence_steps** - Individual emails within sequences
+- **campaigns** - Campaign instances
+- **campaign_emails** - Individual email tracking
+
+## 📧 Email Provider Setup
+
+EmailForge supports any SMTP/IMAP provider. Popular options include:
+
+- **Zoho** - Business email with good deliverability
+- **ProtonMail** - Privacy-focused email service
+- **Fastmail** - Reliable business email
+- **Custom domains** with proper SPF/DKIM setup
+
+## 🔒 Security Features
+
+- **Credential Encryption** - All email passwords encrypted with Fernet
+- **JWT Authentication** - Secure token-based authentication
+- **Rate Limiting** - Configurable limits per account
+- **Input Validation** - Comprehensive sanitization of all inputs
+- **Audit Logging** - Track all sensitive operations
+
+## 📊 Performance & Scaling
+
+- **Connection Pooling** - Efficient database connections
+- **Task Queuing** - Asynchronous email processing
+- **Rate Limiting** - Prevent account bans and spam flags
+- **Horizontal Scaling** - Add more workers as needed
+
+## 🧪 Testing
+
+```bash
+# Run backend tests
+pytest
+
+# Run frontend tests
+cd frontend
+npm test
+
+# Run integration tests
+python -m pytest tests/integration/
+```
+
+## 🚀 Deployment
+
+### Render Deployment
+
+1. **Backend Service**
+   - Connect your GitHub repository
+   - Set environment variables
+   - Deploy as Web Service
+
+2. **Frontend Static Site**
+   - Build the React app: `npm run build`
+   - Deploy dist folder as Static Site
+
+3. **Redis Service**
+   - Add Redis service for task queuing
+
+## 📈 Monitoring & Analytics
+
+- **Real-time Dashboard** - Monitor campaign performance
+- **Email Metrics** - Track opens, replies, bounces
+- **Account Health** - Monitor email account status
+- **Deliverability Scores** - Spam score and blacklist monitoring
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: Check the [Wiki](../../wiki) for detailed guides
+- **Issues**: Report bugs and feature requests via [GitHub Issues](../../issues)
+- **Discussions**: Join community discussions in [GitHub Discussions](../../discussions)
+
+## 🗺️ Roadmap
+
+### MVP (Current)
+- [x] Basic authentication and user management
+- [x] Email account management
+- [x] Lead import and management
+- [x] Sequence builder
+- [x] Campaign sending
+- [x] Unified inbox
+- [x] Basic analytics
+
+### Future Releases
+- [ ] AI-powered personalization
+- [ ] Multi-channel outreach (SMS, LinkedIn)
+- [ ] Advanced analytics and reporting
+- [ ] White-labeling for agencies
+- [ ] Mobile application
+- [ ] API for third-party integrations
+
+---
+
+**Built with ❤️ for the cold email community**
