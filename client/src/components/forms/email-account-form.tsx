@@ -62,7 +62,7 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
       imapHost: initialData?.imapHost || '',
       imapPort: initialData?.imapPort || 993,
       username: initialData?.username || '',
-      encryptedPassword: '', // Don't pre-fill password for security
+      password: '', // Don't pre-fill password for security
       dailyLimit: initialData?.dailyLimit || 50,
     },
   });
@@ -79,7 +79,7 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
         imapHost: initialData.imapHost || '',
         imapPort: initialData.imapPort || 993,
         username: initialData.username || '',
-        encryptedPassword: '', // Don't pre-fill password for security
+        password: '', // Don't pre-fill password for security
         dailyLimit: initialData.dailyLimit || 50,
       });
     }
@@ -343,7 +343,7 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
           <div>
             <FormField
               control={form.control}
-              name="encryptedPassword"
+              name="password"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Password</FormLabel>

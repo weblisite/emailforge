@@ -130,15 +130,18 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
-export const insertEmailAccountSchema = createInsertSchema(emailAccounts).omit({
-  id: true,
-  userId: true,
-  sentToday: true,
-  lastTested: true,
-  status: true,
-  errorMessage: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertEmailAccountSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+  provider: z.string(),
+  smtpHost: z.string(),
+  smtpPort: z.number(),
+  imapHost: z.string(),
+  imapPort: z.number(),
+  username: z.string(),
+  password: z.string(), // Plain password that will be encrypted by backend
+  dailyLimit: z.number().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const updateEmailAccountSchema = createInsertSchema(emailAccounts).omit({

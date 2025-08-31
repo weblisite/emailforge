@@ -22,8 +22,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const emailAccountData = insertEmailAccountSchema.parse(req.body);
+      
+      // Encrypt the password before storing
+      const encryptedPassword = emailService.encryptPassword(emailAccountData.password);
+      
       const emailAccount = await storage.createEmailAccount({
-        ...emailAccountData,
+        name: emailAccountData.name,
+        email: emailAccountData.email,
+        provider: emailAccountData.provider,
+        smtpHost: emailAccountData.smtpHost,
+        smtpPort: emailAccountData.smtpPort,
+        imapHost: emailAccountData.imapHost,
+        imapPort: emailAccountData.imapPort,
+        username: emailAccountData.username,
+        encryptedPassword,
+        dailyLimit: emailAccountData.dailyLimit,
+        isActive: emailAccountData.isActive,
         userId: currentUser.id,
       });
 
