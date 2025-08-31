@@ -98,10 +98,7 @@ export default function Settings() {
     console.log('handleEditProfile called, user:', user);
     console.log('Current isEditingProfile before:', isEditingProfile);
     if (user) {
-      setProfileData({
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'User',
-        email: user.primaryEmailAddress?.emailAddress || ''
-      });
+      // Don't reset profileData - let user edit the current values
       setIsEditingProfile(true);
       console.log('Setting isEditingProfile to true');
       console.log('State should now be true');
