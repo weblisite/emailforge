@@ -1,10 +1,11 @@
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { insertEmailAccountSchema } from "@shared/schema";
+import { insertEmailAccountSchema, updateEmailAccountSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -15,25 +16,27 @@ type EmailAccountFormData = z.infer<typeof insertEmailAccountSchema>;
 interface EmailAccountFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
+  initialData?: any;
+  isEditing?: boolean;
 }
 
 const providerPresets = {
+  gmail: {
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 587,
+    imapHost: 'imap.gmail.com',
+    imapPort: 993,
+  },
+  outlook: {
+    smtpHost: 'smtp-mail.outlook.com',
+    smtpPort: 587,
+    imapHost: 'outlook.office365.com',
+    imapPort: 993,
+  },
   zoho: {
     smtpHost: 'smtp.zoho.com',
     smtpPort: 587,
     imapHost: 'imap.zoho.com',
-    imapPort: 993,
-  },
-  protonmail: {
-    smtpHost: 'smtp.protonmail.com',
-    smtpPort: 587,
-    imapHost: 'imap.protonmail.com',
-    imapPort: 993,
-  },
-  fastmail: {
-    smtpHost: 'smtp.fastmail.com',
-    smtpPort: 587,
-    imapHost: 'imap.fastmail.com',
     imapPort: 993,
   },
   custom: {
@@ -44,50 +47,47 @@ const providerPresets = {
   },
 };
 
-export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFormProps) {
+export default function EmailAccountForm({ onSuccess, onCancel, initialData, isEditing = false }: EmailAccountFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<EmailAccountFormData>({
-    resolver: zodResolver(insertEmailAccountSchema),
+    resolver: zodResolver(isEditing ? updateEmailAccountSchema : insertEmailAccountSchema),
     defaultValues: {
-      name: "",
-      email: "",
-      provider: "",
-      smtpHost: "",
-      smtpPort: 587,
-      imapHost: "",
-      imapPort: 993,
-      username: "",
-      dailyLimit: 50,
-      isActive: true,
+      name: initialData?.name || '',
+      email: initialData?.email || '',
+      provider: initialData?.provider || '',
+      smtpHost: initialData?.smtpHost || '',
+      smtpPort: initialData?.smtpPort || 587,
+      imapHost: initialData?.imapHost || '',
+      imapPort: initialData?.imapPort || 993,
+      username: initialData?.username || '',
+      encryptedPassword: '', // Don't pre-fill password for security
+      dailyLimit: initialData?.dailyLimit || 50,
     },
   });
 
-  const createAccountMutation = useMutation({
-    mutationFn: api.createEmailAccount,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/email-accounts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
-      toast({
-        title: "Email account added successfully",
-        description: "Your email account has been configured and tested.",
+  // Reset form when editing to ensure all fields are properly set
+  useEffect(() => {
+    if (isEditing && initialData) {
+      form.reset({
+        name: initialData.name || '',
+        email: initialData.email || '',
+        provider: initialData.provider || '',
+        smtpHost: initialData.smtpHost || '',
+        smtpPort: initialData.smtpPort || 587,
+        imapHost: initialData.imapHost || '',
+        imapPort: initialData.imapPort || 993,
+        username: initialData.username || '',
+        encryptedPassword: '', // Don't pre-fill password for security
+        dailyLimit: initialData.dailyLimit || 50,
       });
-      onSuccess?.();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to add email account",
-        description: error.message || "Please check your credentials and try again.",
-        variant: "destructive",
-      });
-    },
-  });
+    }
+  }, [isEditing, initialData, form]);
 
   const handleProviderChange = (provider: string) => {
     const preset = providerPresets[provider as keyof typeof providerPresets];
     if (preset) {
-      form.setValue('provider', provider);
       form.setValue('smtpHost', preset.smtpHost);
       form.setValue('smtpPort', preset.smtpPort);
       form.setValue('imapHost', preset.imapHost);
@@ -95,15 +95,54 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
     }
   };
 
+  const createEmailAccountMutation = useMutation({
+    mutationFn: async (data: EmailAccountFormData) => {
+      if (isEditing && initialData?.id) {
+        console.log('Updating email account:', initialData.id, 'with data:', data);
+        const result = await api.updateEmailAccount(initialData.id, data);
+        console.log('Update result:', result);
+        return result;
+      } else {
+        console.log('Creating new email account with data:', data);
+        const result = await api.createEmailAccount(data);
+        console.log('Create result:', result);
+        return result;
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: isEditing ? "Email account updated successfully" : "Email account added successfully",
+        description: isEditing 
+          ? "Your email account settings have been updated."
+          : "Your email account has been configured and is ready to use.",
+      });
+      
+      // Refresh the email accounts list
+      queryClient.invalidateQueries({ queryKey: ['/api/email-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
+      
+      onSuccess?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: isEditing ? "Failed to update email account" : "Failed to add email account",
+        description: error.message || "Please check your settings and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const onSubmit = (data: EmailAccountFormData) => {
-    createAccountMutation.mutate(data);
+    console.log('🔍 Form submission data:', data);
+    createEmailAccountMutation.mutate(data);
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" data-testid="email-account-form">
-        <div className="row">
-          <div className="col-md-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Row 1: Account Name & Email */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
             <FormField
               control={form.control}
               name="name"
@@ -113,8 +152,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormControl>
                     <Input 
                       placeholder="e.g., Sales Account" 
-                      data-testid="input-account-name"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -123,7 +161,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
             />
           </div>
           
-          <div className="col-md-6">
+          <div>
             <FormField
               control={form.control}
               name="email"
@@ -132,10 +170,9 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
                     <Input 
-                      type="email" 
+                      type="email"
                       placeholder="sales@company.com" 
-                      data-testid="input-email"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -145,31 +182,27 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
           </div>
         </div>
 
-        <div className="row">
-          <div className="col-md-6">
+        {/* Row 2: Provider & Daily Limit */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
             <FormField
               control={form.control}
               name="provider"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email Provider</FormLabel>
-                  <Select 
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      handleProviderChange(value);
-                    }} 
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger data-testid="select-provider">
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
-                    </FormControl>
+                  <Select onValueChange={(value) => {
+                    field.onChange(value);
+                    handleProviderChange(value);
+                  }} defaultValue={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="zoho">Zoho Mail</SelectItem>
-                      <SelectItem value="protonmail">ProtonMail</SelectItem>
-                      <SelectItem value="fastmail">Fastmail</SelectItem>
-                      <SelectItem value="custom">Custom SMTP</SelectItem>
+                      <SelectItem value="gmail">Gmail</SelectItem>
+                      <SelectItem value="outlook">Outlook</SelectItem>
+                      <SelectItem value="zoho">Zoho</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -178,19 +211,19 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
             />
           </div>
           
-          <div className="col-md-6">
+          <div>
             <FormField
               control={form.control}
-              name="username"
+              name="dailyLimit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Username/Password</FormLabel>
+                  <FormLabel>Daily Send Limit</FormLabel>
                   <FormControl>
                     <Input 
-                      type="password" 
-                      placeholder="Your email password" 
-                      data-testid="input-password"
-                      {...field} 
+                      type="number"
+                      placeholder="50" 
+                      {...field}
+                      onChange={(e) => field.onChange(parseInt(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />
@@ -200,8 +233,9 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
           </div>
         </div>
 
-        <div className="row">
-          <div className="col-md-6">
+        {/* Row 3: SMTP Host & Port */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
             <FormField
               control={form.control}
               name="smtpHost"
@@ -211,8 +245,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormControl>
                     <Input 
                       placeholder="smtp.example.com" 
-                      data-testid="input-smtp-host"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -221,7 +254,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
             />
           </div>
           
-          <div className="col-md-6">
+          <div>
             <FormField
               control={form.control}
               name="smtpPort"
@@ -230,11 +263,10 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormLabel>SMTP Port</FormLabel>
                   <FormControl>
                     <Input 
-                      type="number" 
+                      type="number"
                       placeholder="587" 
-                      data-testid="input-smtp-port"
-                      {...field} 
-                      onChange={(e) => field.onChange(Number(e.target.value))}
+                      {...field}
+                      onChange={(e) => field.onChange(parseInt(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />
@@ -244,8 +276,9 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
           </div>
         </div>
 
-        <div className="row">
-          <div className="col-md-6">
+        {/* Row 4: IMAP Host & Port */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
             <FormField
               control={form.control}
               name="imapHost"
@@ -255,8 +288,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormControl>
                     <Input 
                       placeholder="imap.example.com" 
-                      data-testid="input-imap-host"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -265,7 +297,7 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
             />
           </div>
           
-          <div className="col-md-6">
+          <div>
             <FormField
               control={form.control}
               name="imapPort"
@@ -274,11 +306,10 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
                   <FormLabel>IMAP Port</FormLabel>
                   <FormControl>
                     <Input 
-                      type="number" 
+                      type="number"
                       placeholder="993" 
-                      data-testid="input-imap-port"
-                      {...field} 
-                      onChange={(e) => field.onChange(Number(e.target.value))}
+                      {...field}
+                      onChange={(e) => field.onChange(parseInt(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />
@@ -288,44 +319,66 @@ export default function EmailAccountForm({ onSuccess, onCancel }: EmailAccountFo
           </div>
         </div>
 
-        <FormField
-          control={form.control}
-          name="dailyLimit"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Daily Sending Limit</FormLabel>
-              <FormControl>
-                <Input 
-                  type="number" 
-                  placeholder="50" 
-                  data-testid="input-daily-limit"
-                  {...field}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(Number(e.target.value))}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Row 5: Username & Password */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="your-email@domain.com"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          
+          <div>
+            <FormField
+              control={form.control}
+              name="encryptedPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Your email password"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
 
-        <div className="d-flex gap-2 justify-content-end">
+        {/* Form Actions */}
+        <div className="flex justify-end space-x-3 pt-2">
           {onCancel && (
             <Button 
               type="button" 
               variant="outline" 
               onClick={onCancel}
-              data-testid="button-cancel"
             >
               Cancel
             </Button>
           )}
+          
           <Button 
             type="submit" 
-            disabled={createAccountMutation.isPending}
-            data-testid="button-save-account"
+            disabled={createEmailAccountMutation.isPending}
+            className="min-w-[120px]"
           >
-            {createAccountMutation.isPending ? "Testing & Saving..." : "Save Account"}
+            {createEmailAccountMutation.isPending ? (isEditing ? "Updating..." : "Adding...") : (isEditing ? "Update Email Account" : "Add Email Account")}
           </Button>
         </div>
       </form>

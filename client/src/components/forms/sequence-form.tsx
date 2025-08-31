@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { insertSequenceSchema } from "@shared/schema";
+import { insertSequenceSchema, updateSequenceSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,14 +25,16 @@ type SequenceFormData = z.infer<typeof insertSequenceSchema> & {
 interface SequenceFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
+  initialData?: any;
+  isEditing?: boolean;
 }
 
-export default function SequenceForm({ onSuccess, onCancel }: SequenceFormProps) {
+export default function SequenceForm({ onSuccess, onCancel, initialData, isEditing = false }: SequenceFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<SequenceFormData>({
-    resolver: zodResolver(insertSequenceSchema.extend({
+    resolver: zodResolver((isEditing ? updateSequenceSchema : insertSequenceSchema).extend({
       steps: z.array(z.object({
         stepNumber: z.number(),
         subject: z.string().min(1, "Subject is required"),
@@ -41,10 +43,10 @@ export default function SequenceForm({ onSuccess, onCancel }: SequenceFormProps)
       })),
     })),
     defaultValues: {
-      name: "",
-      description: "",
-      isActive: true,
-      steps: [
+      name: initialData?.name || "",
+      description: initialData?.description || "",
+      isActive: initialData?.isActive ?? true,
+      steps: initialData?.steps || [
         {
           stepNumber: 1,
           subject: "",
@@ -55,24 +57,57 @@ export default function SequenceForm({ onSuccess, onCancel }: SequenceFormProps)
     },
   });
 
+  // Reset form when editing to ensure all fields are properly set
+  useEffect(() => {
+    if (isEditing && initialData) {
+      form.reset({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        isActive: initialData.isActive ?? true,
+        steps: initialData.steps || [
+          {
+            stepNumber: 1,
+            subject: "",
+            body: "",
+            delayDays: 0,
+          },
+        ],
+      });
+    }
+  }, [isEditing, initialData, form]);
+
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "steps",
   });
 
   const createSequenceMutation = useMutation({
-    mutationFn: (data: { sequence: any; steps: any[] }) => api.createSequence(data),
+    mutationFn: async (data: SequenceFormData) => {
+      if (isEditing && initialData?.id) {
+        console.log('Updating sequence:', initialData.id, 'with data:', data);
+        const result = await api.updateSequence(initialData.id, data);
+        console.log('Update result:', result);
+        return result;
+      } else {
+        console.log('Creating new sequence with data:', data);
+        const result = await api.createSequence(data);
+        console.log('Create result:', result);
+        return result;
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/sequences'] });
       toast({
-        title: "Sequence created successfully",
-        description: "Your email sequence is ready to use in campaigns.",
+        title: isEditing ? "Sequence updated successfully" : "Sequence created successfully",
+        description: isEditing 
+          ? "Your email sequence has been updated."
+          : "Your email sequence is ready to use in campaigns.",
       });
       onSuccess?.();
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to create sequence",
+        title: isEditing ? "Failed to update sequence" : "Failed to create sequence",
         description: error.message || "Please try again.",
         variant: "destructive",
       });
@@ -268,7 +303,7 @@ export default function SequenceForm({ onSuccess, onCancel }: SequenceFormProps)
             disabled={createSequenceMutation.isPending}
             data-testid="button-save-sequence"
           >
-            {createSequenceMutation.isPending ? "Creating..." : "Create Sequence"}
+            {createSequenceMutation.isPending ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Sequence" : "Create Sequence")}
           </Button>
         </div>
       </form>

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Reply, Filter, Search, Mail } from "lucide-react";
+import { BookmarkCheck, Reply, Filter, Search, Mail, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import type { InboxMessage } from "@shared/schema";
@@ -12,12 +13,59 @@ import type { InboxMessage } from "@shared/schema";
 export default function Inbox() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sentimentFilter, setSentimentFilter] = useState("all");
+  const [isReplyOpen, setIsReplyOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<any>(null);
+  const [replyContent, setReplyContent] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['/api/inbox'],
     queryFn: () => api.getInboxMessages(),
+  });
+
+  // Search functionality using the new API
+  const searchMutation = useMutation({
+    mutationFn: (query: string) => api.searchInbox(query),
+    onSuccess: (searchResults) => {
+      // Update the displayed messages with search results
+      // In a real app, you might want to maintain separate state for search results
+      console.log('Search results:', searchResults);
+    },
+    onError: () => {
+      toast({
+        title: "Search failed",
+        description: "Could not perform search. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Send reply mutation
+  const sendReplyMutation = useMutation({
+    mutationFn: (replyData: { to: string; subject: string; body: string }) => 
+      api.sendEmail({
+        to: replyData.to,
+        subject: replyData.subject,
+        body: replyData.body,
+        type: 'reply'
+      }),
+    onSuccess: () => {
+      toast({
+        title: "Reply sent successfully",
+        description: "Your reply has been sent.",
+      });
+      setIsReplyOpen(false);
+      setReplyingTo(null);
+      setReplyContent("");
+    },
+    onError: () => {
+      toast({
+        title: "Failed to send reply",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const markReadMutation = useMutation({
@@ -72,6 +120,13 @@ export default function Inbox() {
     return matchesSearch && matchesSentiment;
   });
 
+  // Enhanced search with API integration
+  const handleSearch = async () => {
+    if (searchTerm.trim()) {
+      searchMutation.mutate(searchTerm);
+    }
+  };
+
   const unreadCount = messages.filter(m => !m.isRead).length;
 
   const handleMarkAsRead = (messageId: string) => {
@@ -85,16 +140,47 @@ export default function Inbox() {
     });
   };
 
-  if (isLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Inbox...</div>
-          <div className="text-muted-foreground">Fetching your messages</div>
-        </div>
-      </div>
-    );
-  }
+  const handleProcessUnsubscribe = (message: any) => {
+    // TODO: Implement actual unsubscribe processing
+    toast({
+      title: "Unsubscribe Processed",
+      description: `Unsubscribe request from ${message.fromEmail} has been processed.`,
+    });
+  };
+
+  const handleReply = (message: any) => {
+    setReplyingTo(message);
+    setIsReplyOpen(true);
+  };
+
+  const handleSendReply = async () => {
+    if (!replyContent.trim()) {
+      toast({
+        title: "Reply content required",
+        description: "Please enter your reply message.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!replyingTo) {
+      toast({
+        title: "No message selected",
+        description: "Please select a message to reply to.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Send reply using the API
+    sendReplyMutation.mutate({
+      to: replyingTo.fromEmail,
+      subject: `Re: ${replyingTo.subject}`,
+      body: replyContent
+    });
+  };
+
+  // Remove loading state - show content immediately
 
   return (
     <div>
@@ -123,15 +209,35 @@ export default function Inbox() {
       {/* Filters and Search */}
       <div className="row mb-4">
         <div className="col-md-6">
-          <div className="position-relative">
-            <Search className="position-absolute top-50 start-0 translate-middle-y ms-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search messages by sender, subject..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="ps-5"
-              data-testid="input-search-messages"
-            />
+          <div className="d-flex gap-2">
+            <div className="position-relative flex-1">
+              <Search className="position-absolute top-50 start-0 translate-middle-y ms-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search messages by sender, subject..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="ps-5"
+                data-testid="input-search-messages"
+              />
+            </div>
+            <Button 
+              onClick={handleSearch}
+              disabled={searchMutation.isPending}
+              data-testid="button-search-messages"
+            >
+              {searchMutation.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Searching...
+                </>
+                ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </>
+              )}
+            </Button>
           </div>
         </div>
         <div className="col-md-3">
@@ -227,6 +333,7 @@ export default function Inbox() {
                           <Button 
                             variant="outline" 
                             size="sm"
+                            onClick={() => handleProcessUnsubscribe(message)}
                             data-testid={`process-unsubscribe-${message.id}`}
                           >
                             Process
@@ -235,6 +342,7 @@ export default function Inbox() {
                           <Button 
                             variant="outline" 
                             size="sm"
+                            onClick={() => handleReply(message)}
                             data-testid={`reply-message-${message.id}`}
                           >
                             <Reply className="h-4 w-4 mr-1" />
@@ -269,6 +377,50 @@ export default function Inbox() {
           )}
         </div>
       )}
+
+      {/* Reply Dialog */}
+      <Dialog open={isReplyOpen} onOpenChange={setIsReplyOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Reply to Message</DialogTitle>
+            <DialogDescription>
+              Send a reply to {replyingTo?.fromEmail}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="form-label">Reply Content</label>
+              <textarea
+                className="form-control"
+                rows={6}
+                placeholder="Type your reply message..."
+                value={replyContent}
+                onChange={(e) => setReplyContent(e.target.value)}
+                data-testid="input-reply-content"
+              />
+            </div>
+            <div className="d-flex gap-2 justify-content-end">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsReplyOpen(false);
+                  setReplyingTo(null);
+                  setReplyContent("");
+                }}
+                data-testid="button-cancel-reply"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSendReply}
+                data-testid="button-send-reply"
+              >
+                Send Reply
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

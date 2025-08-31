@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Upload, MoreHorizontal, Trash2, Edit, FileText } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Trash2, Edit, FileText, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -13,12 +13,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import LeadForm from "@/components/forms/lead-form";
 import type { Lead } from "@shared/schema";
 
 export default function Leads() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -84,9 +89,66 @@ export default function Leads() {
     (lead.company && lead.company.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Enhanced search with API integration
+  const searchMutation = useMutation({
+    mutationFn: (query: string) => api.searchLeads(query),
+    onSuccess: (searchResults) => {
+      // In a real app, you might want to maintain separate state for search results
+      console.log('Search results:', searchResults);
+    },
+    onError: () => {
+      toast({
+        title: "Search failed",
+        description: "Could not perform search. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSearch = async () => {
+    if (searchTerm.trim()) {
+      searchMutation.mutate(searchTerm);
+    }
+  };
+
   const handleDelete = (lead: Lead) => {
     if (confirm(`Are you sure you want to delete ${lead.name}?`)) {
       deleteLeadMutation.mutate(lead.id);
+    }
+  };
+
+  const handleEdit = (lead: Lead) => {
+    setEditingLead(lead);
+    setIsEditOpen(true);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeads.length === 0) return;
+    
+    if (confirm(`Are you sure you want to delete ${selectedLeads.length} selected leads?`)) {
+      try {
+        await api.deleteLeadsBulk(selectedLeads);
+        queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+        setSelectedLeads([]);
+        toast({
+          title: "Leads deleted successfully",
+          description: `${selectedLeads.length} leads have been removed.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Bulk delete failed",
+          description: "Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleSelectLead = (leadId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedLeads(prev => [...prev, leadId]);
+    } else {
+      setSelectedLeads(prev => prev.filter(id => id !== leadId));
     }
   };
 
@@ -149,16 +211,7 @@ export default function Leads() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Leads...</div>
-          <div className="text-muted-foreground">Fetching your contact database</div>
-        </div>
-      </div>
-    );
-  }
+  // Remove loading state - show content immediately
 
   return (
     <div>
@@ -171,6 +224,16 @@ export default function Leads() {
           </p>
         </div>
         <div className="d-flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleBulkDelete}
+            disabled={selectedLeads.length === 0}
+            data-testid="button-bulk-delete-leads"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Selected ({selectedLeads.length})
+          </Button>
+          
           <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-upload-leads">
@@ -226,22 +289,58 @@ export default function Leads() {
             </DialogContent>
           </Dialog>
           
-          <Button data-testid="button-add-lead">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Lead
-          </Button>
+                  <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-lead">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Lead
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Add New Lead</DialogTitle>
+              <DialogDescription>
+                Add a new lead to your contact database.
+              </DialogDescription>
+            </DialogHeader>
+            <LeadForm 
+              onSuccess={() => setIsAddLeadOpen(false)}
+              onCancel={() => setIsAddLeadOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
         </div>
       </div>
 
       {/* Search and Stats */}
       <div className="row mb-4">
         <div className="col-md-6">
-          <Input
-            placeholder="Search leads by name, email, or company..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            data-testid="input-search-leads"
-          />
+          <div className="d-flex gap-2">
+            <Input
+              placeholder="Search leads by name, email, or company..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              data-testid="input-search-leads"
+            />
+            <Button 
+              onClick={handleSearch}
+              disabled={searchMutation.isPending}
+              data-testid="button-search-leads"
+            >
+              {searchMutation.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </>
+              )}
+            </Button>
+          </div>
         </div>
         <div className="col-md-6">
           <div className="d-flex gap-3 align-items-center h-100">
@@ -311,7 +410,10 @@ export default function Leads() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
-                          <DropdownMenuItem data-testid={`lead-edit-${lead.id}`}>
+                          <DropdownMenuItem 
+                            data-testid={`lead-edit-${lead.id}`}
+                            onClick={() => handleEdit(lead)}
+                          >
                             <Edit className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
@@ -397,10 +499,26 @@ export default function Leads() {
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Button data-testid="button-add-first-lead">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Lead
-                </Button>
+                <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-add-first-lead">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Lead
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle>Add New Lead</DialogTitle>
+                      <DialogDescription>
+                        Add a new lead to your contact database.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <LeadForm 
+                      onSuccess={() => setIsAddLeadOpen(false)}
+                      onCancel={() => setIsAddLeadOpen(false)}
+                    />
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
           ) : (
@@ -413,6 +531,32 @@ export default function Leads() {
           )}
         </div>
       )}
+
+      {/* Edit Lead Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Lead</DialogTitle>
+            <DialogDescription>
+              Update lead information and contact details.
+            </DialogDescription>
+          </DialogHeader>
+          {editingLead && (
+            <LeadForm 
+              onSuccess={() => {
+                setIsEditOpen(false);
+                setEditingLead(null);
+              }}
+              onCancel={() => {
+                setIsEditOpen(false);
+                setEditingLead(null);
+              }}
+              initialData={editingLead}
+              isEditing={true}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

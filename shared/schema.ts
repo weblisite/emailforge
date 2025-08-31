@@ -141,10 +141,24 @@ export const insertEmailAccountSchema = createInsertSchema(emailAccounts).omit({
   updatedAt: true,
 });
 
+export const updateEmailAccountSchema = createInsertSchema(emailAccounts).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertLeadSchema = createInsertSchema(leads).omit({
   id: true,
   userId: true,
   status: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateLeadSchema = createInsertSchema(leads).omit({
+  id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -156,7 +170,19 @@ export const insertSequenceSchema = createInsertSchema(sequences).omit({
   updatedAt: true,
 });
 
+export const updateSequenceSchema = createInsertSchema(sequences).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertSequenceStepSchema = createInsertSchema(sequenceSteps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const updateSequenceStepSchema = createInsertSchema(sequenceSteps).omit({
   id: true,
   createdAt: true,
 });
@@ -176,12 +202,19 @@ export const insertCampaignSchema = createInsertSchema(campaigns).omit({
   updatedAt: true,
 });
 
+export const updateCampaignSchema = z.object({
+  name: z.string().optional(),
+  status: z.enum(['draft', 'active', 'paused', 'completed']).optional(),
+  sequenceId: z.string().optional(),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type EmailAccount = typeof emailAccounts.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Sequence = typeof sequences.$inferSelect;
 export type SequenceStep = typeof sequenceSteps.$inferSelect;
+export type SequenceWithSteps = Sequence & { steps: SequenceStep[] };
 export type Campaign = typeof campaigns.$inferSelect;
 export type CampaignEmail = typeof campaignEmails.$inferSelect;
 export type InboxMessage = typeof inboxMessages.$inferSelect;

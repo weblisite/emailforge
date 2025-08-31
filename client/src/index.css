@@ -78,6 +78,10 @@
     @apply font-sans antialiased bg-background text-foreground;
     font-family: var(--font-sans);
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 .sidebar {

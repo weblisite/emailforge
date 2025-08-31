@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, MoreHorizontal, TestTube, Trash2, Edit } from "lucide-react";
+import { Plus, MoreHorizontal, TestTube, Trash2, Edit, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -17,6 +17,8 @@ import type { EmailAccount } from "@shared/schema";
 
 export default function EmailAccounts() {
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<EmailAccount | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -46,7 +48,7 @@ export default function EmailAccounts() {
 
   const testAccountMutation = useMutation({
     mutationFn: api.testEmailAccount,
-    onSuccess: (result, accountId) => {
+    onSuccess: (result: any, accountId: string) => {
       queryClient.invalidateQueries({ queryKey: ['/api/email-accounts'] });
       toast({
         title: result.success ? "Connection successful" : "Connection failed",
@@ -101,16 +103,12 @@ export default function EmailAccounts() {
     testAccountMutation.mutate(account.id);
   };
 
-  if (isLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Email Accounts...</div>
-          <div className="text-muted-foreground">Fetching your configured accounts</div>
-        </div>
-      </div>
-    );
-  }
+  const handleEdit = (account: EmailAccount) => {
+    setEditingAccount(account);
+    setIsEditOpen(true);
+  };
+
+  // Remove loading state - show content immediately
 
   return (
     <div>
@@ -122,29 +120,12 @@ export default function EmailAccounts() {
             Manage your SMTP/IMAP email account connections
           </p>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-email-account">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Email Account
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>Add Email Account</DialogTitle>
-            </DialogHeader>
-            <EmailAccountForm 
-              onSuccess={() => setIsFormOpen(false)}
-              onCancel={() => setIsFormOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
 
       {/* Accounts Grid */}
-      {accounts.length > 0 ? (
+      {(accounts as EmailAccount[]).length > 0 ? (
         <div className="row">
-          {accounts.map((account) => (
+          {(accounts as EmailAccount[]).map((account: EmailAccount) => (
             <div key={account.id} className="col-lg-6 col-xl-4 mb-4">
               <div className="metric-card h-100" data-testid={`account-card-${account.id}`}>
                 <div className="d-flex justify-content-between align-items-start mb-3">
@@ -176,7 +157,10 @@ export default function EmailAccounts() {
                         <TestTube className="h-4 w-4 mr-2" />
                         Test Connection
                       </DropdownMenuItem>
-                      <DropdownMenuItem data-testid={`account-edit-${account.id}`}>
+                      <DropdownMenuItem 
+                        data-testid={`account-edit-${account.id}`}
+                        onClick={() => handleEdit(account)}
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
@@ -250,6 +234,9 @@ export default function EmailAccounts() {
             <DialogContent className="max-w-4xl">
               <DialogHeader>
                 <DialogTitle>Add Email Account</DialogTitle>
+                <DialogDescription>
+                  Add a new email account to enable sending campaigns.
+                </DialogDescription>
               </DialogHeader>
               <EmailAccountForm 
                 onSuccess={() => setIsFormOpen(false)}
@@ -259,6 +246,32 @@ export default function EmailAccounts() {
           </Dialog>
         </div>
       )}
+
+      {/* Edit Email Account Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Email Account</DialogTitle>
+            <DialogDescription>
+              Update your email account settings and credentials.
+            </DialogDescription>
+          </DialogHeader>
+          {editingAccount && (
+            <EmailAccountForm 
+              onSuccess={() => {
+                setIsEditOpen(false);
+                setEditingAccount(null);
+              }}
+              onCancel={() => {
+                setIsEditOpen(false);
+                setEditingAccount(null);
+              }}
+              initialData={editingAccount}
+              isEditing={true}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

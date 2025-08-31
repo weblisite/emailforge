@@ -5,14 +5,17 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// Toast configuration - optimized for better UX
+const TOAST_LIMIT = 3 // Allow up to 3 toasts at once
+const TOAST_REMOVE_DELAY = 2000 // 2 seconds - quick dismissal for better UX
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  duration?: number // Allow custom duration per toast
+  persistent?: boolean // If true, toast won't auto-dismiss
 }
 
 const actionTypes = {
@@ -55,20 +58,34 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
-  if (toastTimeouts.has(toastId)) {
+const addToRemoveQueue = (toastId: string, customDuration?: number, persistent?: boolean) => {
+  if (toastTimeouts.has(toastId) || persistent) {
     return
   }
 
+  const duration = customDuration || TOAST_REMOVE_DELAY
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
     dispatch({
       type: "REMOVE_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, duration)
 
   toastTimeouts.set(toastId, timeout)
+}
+
+// Also add immediate removal for dismissed toasts
+const removeToastImmediately = (toastId: string) => {
+  if (toastTimeouts.has(toastId)) {
+    clearTimeout(toastTimeouts.get(toastId)!)
+    toastTimeouts.delete(toastId)
+  }
+  
+  dispatch({
+    type: "REMOVE_TOAST",
+    toastId: toastId,
+  })
 }
 
 export const reducer = (state: State, action: Action): State => {
@@ -93,10 +110,11 @@ export const reducer = (state: State, action: Action): State => {
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
       if (toastId) {
-        addToRemoveQueue(toastId)
+        const toast = state.toasts.find(t => t.id === toastId)
+        addToRemoveQueue(toastId, toast?.duration, toast?.persistent)
       } else {
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
+          addToRemoveQueue(toast.id, toast.duration, toast.persistent)
         })
       }
 
@@ -139,8 +157,25 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+// Helper functions for common toast types
+export const toastSuccess = (props: Omit<Toast, "variant">) => 
+  toast({ ...props, variant: "success" })
+
+export const toastWarning = (props: Omit<Toast, "variant">) => 
+  toast({ ...props, variant: "warning" })
+
+export const toastError = (props: Omit<Toast, "variant">) => 
+  toast({ ...props, variant: "destructive" })
+
+export const toastInfo = (props: Omit<Toast, "variant">) => 
+  toast({ ...props, variant: "default" })
+
+export const toastPersistent = (props: Omit<Toast, "persistent">) => 
+  toast({ ...props, persistent: true })
+
+function toast({ duration, persistent, ...props }: Toast) {
   const id = genId()
+  const toastDuration = persistent ? undefined : (duration || TOAST_REMOVE_DELAY)
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -154,6 +189,8 @@ function toast({ ...props }: Toast) {
     toast: {
       ...props,
       id,
+      duration: toastDuration,
+      persistent,
       open: true,
       onOpenChange: (open) => {
         if (!open) dismiss()

@@ -1,7 +1,8 @@
 import { useForm } from "react-hook-form";
+import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { insertCampaignSchema } from "@shared/schema";
+import { insertCampaignSchema, updateCampaignSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,20 +16,42 @@ type CampaignFormData = z.infer<typeof insertCampaignSchema>;
 interface CampaignFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
+  sequenceData?: any; // Sequence data when coming from "Use in Campaign"
+  initialData?: any;
+  isEditing?: boolean;
 }
 
-export default function CampaignForm({ onSuccess, onCancel }: CampaignFormProps) {
+export default function CampaignForm({ onSuccess, onCancel, sequenceData, initialData, isEditing = false }: CampaignFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<CampaignFormData>({
-    resolver: zodResolver(insertCampaignSchema),
+    resolver: zodResolver(isEditing ? updateCampaignSchema : insertCampaignSchema),
     defaultValues: {
-      name: "",
-      sequenceId: "",
-      status: "draft",
+      name: initialData?.name || sequenceData ? `${sequenceData.name} Campaign` : "",
+      sequenceId: initialData?.sequenceId || sequenceData?.id || "",
+      status: initialData?.status || "draft",
     },
   });
+
+  // Pre-fill form when sequence data is available
+  useEffect(() => {
+    if (sequenceData) {
+      form.setValue('name', `${sequenceData.name} Campaign`);
+      form.setValue('sequenceId', sequenceData.id);
+    }
+  }, [sequenceData, form]);
+
+  // Reset form when editing to ensure all fields are properly set
+  useEffect(() => {
+    if (isEditing && initialData) {
+      form.reset({
+        name: initialData.name || "",
+        sequenceId: initialData.sequenceId || "",
+        status: initialData.status || "draft",
+      });
+    }
+  }, [isEditing, initialData, form]);
 
   // Fetch sequences for dropdown
   const { data: sequences = [] } = useQuery({
@@ -37,19 +60,33 @@ export default function CampaignForm({ onSuccess, onCancel }: CampaignFormProps)
   });
 
   const createCampaignMutation = useMutation({
-    mutationFn: api.createCampaign,
+    mutationFn: async (data: CampaignFormData) => {
+      if (isEditing && initialData?.id) {
+        console.log('Updating campaign:', initialData.id, 'with data:', data);
+        const result = await api.updateCampaign(initialData.id, data);
+        console.log('Update result:', result);
+        return result;
+      } else {
+        console.log('Creating new campaign with data:', data);
+        const result = await api.createCampaign(data);
+        console.log('Create result:', result);
+        return result;
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
       toast({
-        title: "Campaign created successfully",
-        description: "Your campaign has been created and is ready to launch.",
+        title: isEditing ? "Campaign updated successfully" : "Campaign created successfully",
+        description: isEditing 
+          ? "Your campaign has been updated."
+          : "Your campaign has been created and is ready to launch.",
       });
       onSuccess?.();
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to create campaign",
+        title: isEditing ? "Failed to update campaign" : "Failed to create campaign",
         description: error.message || "Please try again.",
         variant: "destructive",
       });
@@ -160,7 +197,7 @@ export default function CampaignForm({ onSuccess, onCancel }: CampaignFormProps)
             disabled={createCampaignMutation.isPending || sequences.length === 0}
             data-testid="button-save-campaign"
           >
-            {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+            {createCampaignMutation.isPending ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Campaign" : "Create Campaign")}
           </Button>
         </div>
       </form>

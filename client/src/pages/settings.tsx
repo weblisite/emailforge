@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Save, Shield, TestTube, Database, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@clerk/clerk-react";
 import { api } from "@/lib/api";
 
 export default function Settings() {
+  const { user } = useUser();
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    name: "",
+    email: ""
+  });
   const [deliverabilityTest, setDeliverabilityTest] = useState({
     fromEmail: "",
     subject: "",
@@ -19,13 +26,24 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: user } = useQuery({
-    queryKey: ['/api/auth/me'],
-    queryFn: () => api.me(),
-  });
+  // Debug useEffect
+  useEffect(() => {
+    console.log('isEditingProfile changed to:', isEditingProfile);
+  }, [isEditingProfile]);
+
+  // Update profile data when user changes
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'User',
+        email: user.primaryEmailAddress?.emailAddress || ''
+      });
+    }
+  }, [user]);
 
   const deliverabilityTestMutation = useMutation({
-    mutationFn: api.testDeliverability,
+    mutationFn: ({ fromEmail, subject, body }: { fromEmail: string; subject: string; body: string }) => 
+      api.testDeliverability(body, fromEmail),
     onSuccess: (result) => {
       toast({
         title: "Deliverability test completed",
@@ -58,6 +76,58 @@ export default function Settings() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: (data: { name: string; email: string }) => api.updateProfile(data),
+    onSuccess: () => {
+      toast({
+        title: "Profile updated successfully",
+        description: "Your profile information has been updated.",
+      });
+      setIsEditingProfile(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update profile",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditProfile = () => {
+    console.log('handleEditProfile called, user:', user);
+    console.log('Current isEditingProfile before:', isEditingProfile);
+    if (user) {
+      setProfileData({
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'User',
+        email: user.primaryEmailAddress?.emailAddress || ''
+      });
+      setIsEditingProfile(true);
+      console.log('Setting isEditingProfile to true');
+      console.log('State should now be true');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingProfile(false);
+    setProfileData({
+      name: user?.firstName || user?.lastName || user?.username || 'User',
+      email: user?.primaryEmailAddress?.emailAddress || ''
+    });
+  };
+
+  const handleSaveProfile = () => {
+    if (!profileData.name.trim() || !profileData.email.trim()) {
+      toast({
+        title: "Missing information",
+        description: "Please fill in both name and email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateProfileMutation.mutate(profileData);
+  };
+
   const handleDeliverabilityTest = () => {
     if (!deliverabilityTest.fromEmail || !deliverabilityTest.subject || !deliverabilityTest.body) {
       toast({
@@ -82,6 +152,7 @@ export default function Settings() {
     domainReputationMutation.mutate(domainToCheck);
   };
 
+  console.log('Settings render - isEditingProfile:', isEditingProfile, 'user:', user);
   return (
     <div>
       {/* Header */}
@@ -108,16 +179,18 @@ export default function Settings() {
               <div className="mb-3">
                 <label className="form-label">Name</label>
                 <Input 
-                  value={user?.user?.name || ''} 
-                  readOnly 
+                  value={isEditingProfile ? profileData.name : (user?.firstName || user?.lastName || user?.username || 'User')} 
+                  readOnly={!isEditingProfile}
+                  onChange={(e) => isEditingProfile && setProfileData(prev => ({ ...prev, name: e.target.value }))}
                   data-testid="input-user-name"
                 />
               </div>
               <div className="mb-3">
                 <label className="form-label">Email</label>
                 <Input 
-                  value={user?.user?.email || ''} 
-                  readOnly 
+                  value={isEditingProfile ? profileData.email : (user?.primaryEmailAddress?.emailAddress || '')} 
+                  readOnly={!isEditingProfile}
+                  onChange={(e) => isEditingProfile && setProfileData(prev => ({ ...prev, email: e.target.value }))}
                   data-testid="input-user-email"
                 />
               </div>
@@ -127,10 +200,34 @@ export default function Settings() {
                   <Badge className="badge-success">Active</Badge>
                 </div>
               </div>
-              <Button disabled data-testid="button-update-profile">
-                <Save className="h-4 w-4 mr-2" />
-                Update Profile
-              </Button>
+              {isEditingProfile ? (
+                <div className="d-flex gap-2">
+                  <Button 
+                    onClick={handleSaveProfile}
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-save-profile"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleCancelEdit}
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  onClick={handleEditProfile}
+                  data-testid="button-edit-profile"
+                >
+                  <SettingsIcon className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -214,6 +311,76 @@ export default function Settings() {
                 <TestTube className="h-4 w-4 mr-2" />
                 {deliverabilityTestMutation.isPending ? "Testing..." : "Test Deliverability"}
               </Button>
+
+              {/* Enhanced Deliverability Results */}
+              {deliverabilityTestMutation.data && (
+                <div className="mt-4 p-3 bg-light rounded">
+                  <h6 className="mb-3">Test Results</h6>
+                  
+                  {/* Spam Score */}
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Spam Score:</span>
+                      <Badge 
+                        className={deliverabilityTestMutation.data.spamScore < 3 ? 'badge-success' : 
+                                  deliverabilityTestMutation.data.spamScore < 6 ? 'badge-warning' : 'badge-danger'}
+                      >
+                        {deliverabilityTestMutation.data.spamScore}/10
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Blacklist Status */}
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Blacklist Status:</span>
+                      <Badge 
+                        className={deliverabilityTestMutation.data.blacklistStatus === 'clean' ? 'badge-success' : 'badge-danger'}
+                      >
+                        {deliverabilityTestMutation.data.blacklistStatus}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Email Preview Link */}
+                  {deliverabilityTestMutation.data.emailPreview && (
+                    <div className="mb-3">
+                      <span>Email Preview: </span>
+                      <a href={deliverabilityTestMutation.data.emailPreview} target="_blank" rel="noopener noreferrer" className="text-primary">
+                        View Preview
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Client Compatibility */}
+                  {deliverabilityTestMutation.data.clientCompatibility && (
+                    <div className="mb-3">
+                      <span>Client Compatibility:</span>
+                      <div className="mt-2">
+                        {Object.entries(deliverabilityTestMutation.data.clientCompatibility).map(([client, status]: [string, any]) => (
+                          <Badge 
+                            key={client} 
+                            className={status === 'good' ? 'badge-success' : 'badge-warning'} 
+                            style={{ marginRight: '0.5rem', marginBottom: '0.5rem' }}
+                          >
+                            {client}: {status}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  <div className="mb-3">
+                    <span>Recommendations:</span>
+                    <ul className="mt-2 mb-0">
+                      {deliverabilityTestMutation.data.recommendations.map((rec: string, index: number) => (
+                        <li key={index} className="text-sm">{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -248,6 +415,126 @@ export default function Settings() {
                 <Shield className="h-4 w-4 mr-2" />
                 {domainReputationMutation.isPending ? "Checking..." : "Check Reputation"}
               </Button>
+
+              {/* Enhanced Domain Reputation Results */}
+              {domainReputationMutation.data && (
+                <div className="mt-4 p-3 bg-light rounded">
+                  <h6 className="mb-3">Reputation Analysis</h6>
+                  
+                  {/* Overall Reputation */}
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Overall Reputation:</span>
+                      <Badge 
+                        className={domainReputationMutation.data.reputation === 'excellent' ? 'badge-success' : 
+                                  domainReputationMutation.data.reputation === 'good' ? 'badge-success' : 
+                                  domainReputationMutation.data.reputation === 'moderate' ? 'badge-warning' : 'badge-danger'}
+                      >
+                        {domainReputationMutation.data.reputation}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Reputation Score */}
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Reputation Score:</span>
+                      <Badge 
+                        className={domainReputationMutation.data.score >= 80 ? 'badge-success' : 
+                                  domainReputationMutation.data.score >= 60 ? 'badge-success' : 
+                                  domainReputationMutation.data.score >= 40 ? 'badge-warning' : 'badge-danger'}
+                      >
+                        {domainReputationMutation.data.score}/100
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Technical Factors */}
+                  {domainReputationMutation.data.technicalFactors && (
+                    <div className="mb-3">
+                      <span>Technical Factors:</span>
+                      <div className="mt-2">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>SPF:</span>
+                          <Badge 
+                            className={domainReputationMutation.data.technicalFactors.spf.valid ? 'badge-success' : 'badge-danger'}
+                          >
+                            {domainReputationMutation.data.technicalFactors.spf.valid ? 'Valid' : 'Invalid'}
+                          </Badge>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>DKIM:</span>
+                          <Badge 
+                            className={domainReputationMutation.data.technicalFactors.dkim.valid ? 'badge-success' : 'badge-danger'}
+                          >
+                            {domainReputationMutation.data.technicalFactors.dkim.valid ? 'Valid' : 'Invalid'}
+                          </Badge>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>DMARC:</span>
+                          <Badge 
+                            className={domainReputationMutation.data.technicalFactors.dmarc.valid ? 'badge-success' : 'badge-danger'}
+                          >
+                            {domainReputationMutation.data.technicalFactors.dmarc.valid ? 'Valid' : 'Invalid'}
+                          </Badge>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span>Overall:</span>
+                          <Badge 
+                            className={domainReputationMutation.data.technicalFactors.overall === 'excellent' ? 'badge-success' : 
+                                      domainReputationMutation.data.technicalFactors.overall === 'good' ? 'badge-success' : 
+                                      domainReputationMutation.data.technicalFactors.overall === 'moderate' ? 'badge-warning' : 'badge-danger'}
+                          >
+                            {domainReputationMutation.data.technicalFactors.overall}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Industry Benchmarks */}
+                  {domainReputationMutation.data.industryBenchmarks && (
+                    <div className="mb-3">
+                      <span>Industry Benchmarks:</span>
+                      <div className="mt-2">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>Industry:</span>
+                          <span className="text-muted">{domainReputationMutation.data.industryBenchmarks.industry}</span>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>Average Score:</span>
+                          <span className="text-muted">{domainReputationMutation.data.industryBenchmarks.averageScore}/100</span>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span>Percentile:</span>
+                          <span className="text-muted">{domainReputationMutation.data.industryBenchmarks.percentile}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Historical Data */}
+                  {domainReputationMutation.data.historicalData && (
+                    <div className="mb-3">
+                      <span>Historical Trends:</span>
+                      <div className="mt-2 text-sm text-muted">
+                        <div>30-day trend: {domainReputationMutation.data.historicalData.trend30d || 'N/A'}</div>
+                        <div>90-day trend: {domainReputationMutation.data.historicalData.trend90d || 'N/A'}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  <div className="mb-3">
+                    <span>Recommendations:</span>
+                    <ul className="mt-2 mb-0">
+                      {domainReputationMutation.data.recommendations.map((rec: string, index: number) => (
+                        <li key={index} className="text-sm">{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

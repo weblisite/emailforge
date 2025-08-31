@@ -1,9 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, Eye, MessageSquare, Mail, Users } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { TrendingUp, Eye, MessageSquare, Mail, Users, Download, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import MetricsCard from "@/components/dashboard/metrics-card";
 
 export default function Analytics() {
+  const { toast } = useToast();
+  
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['/api/dashboard/metrics'],
     queryFn: () => api.getDashboardMetrics(),
@@ -24,16 +29,66 @@ export default function Analytics() {
     queryFn: () => api.getLeads(),
   });
 
-  if (metricsLoading || campaignsLoading || accountsLoading || leadsLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Analytics...</div>
-          <div className="text-muted-foreground">Generating your performance reports</div>
-        </div>
-      </div>
-    );
-  }
+  // Fetch detailed analytics for campaigns, leads, and email accounts
+  const { data: campaignAnalytics = [], isLoading: campaignAnalyticsLoading } = useQuery({
+    queryKey: ['/api/campaigns/analytics'],
+    queryFn: async () => {
+      const analyticsPromises = campaigns.map(campaign => 
+        api.getCampaignAnalytics(campaign.id)
+      );
+      return Promise.all(analyticsPromises);
+    },
+    enabled: campaigns.length > 0 && !campaignsLoading,
+  });
+
+  const { data: leadAnalytics = [], isLoading: leadAnalyticsLoading } = useQuery({
+    queryKey: ['/api/leads/analytics'],
+    queryFn: async () => {
+      const analyticsPromises = leads.map(lead => 
+        api.getLeadAnalytics(lead.id)
+      );
+      return Promise.all(analyticsPromises);
+    },
+    enabled: leads.length > 0 && !leadsLoading,
+  });
+
+  const { data: accountAnalytics = [], isLoading: accountAnalyticsLoading } = useQuery({
+    queryKey: ['/api/email-accounts/analytics'],
+    queryFn: async () => {
+      const analyticsPromises = emailAccounts.map(account => 
+        api.getEmailAccountAnalytics(account.id)
+      );
+      return Promise.all(analyticsPromises);
+    },
+    enabled: emailAccounts.length > 0 && !accountsLoading,
+  });
+
+  // Export functionality
+  const exportMutation = useMutation({
+    mutationFn: ({ type, filters }: { type: string; filters?: any }) => 
+      api.exportData(type, filters),
+    onSuccess: (data, variables) => {
+      toast({
+        title: "Export successful",
+        description: `${variables.type} data has been prepared for download.`,
+      });
+      // In a real app, this would trigger a file download
+      console.log(`Export data for ${variables.type}:`, data);
+    },
+    onError: () => {
+      toast({
+        title: "Export failed",
+        description: "Could not export data. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleExport = (type: string) => {
+    exportMutation.mutate({ type });
+  };
+
+  // Remove loading state - show content immediately
 
   // Calculate additional metrics
   const totalCampaigns = campaigns.length;
@@ -55,6 +110,35 @@ export default function Analytics() {
           <p className="text-muted-foreground mb-0">
             Detailed performance insights and campaign analytics
           </p>
+        </div>
+        <div className="d-flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => handleExport('leads')}
+            disabled={exportMutation.isPending}
+            data-testid="button-export-leads"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export Leads
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => handleExport('campaigns')}
+            disabled={exportMutation.isPending}
+            data-testid="button-export-campaigns"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export Campaigns
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => handleExport('email-accounts')}
+            disabled={exportMutation.isPending}
+            data-testid="button-export-accounts"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export Accounts
+          </Button>
         </div>
       </div>
 

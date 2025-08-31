@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, MoreHorizontal, Trash2, Edit, Play, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -13,10 +13,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import SequenceForm from "@/components/forms/sequence-form";
-import type { Sequence } from "@shared/schema";
+import type { Sequence, SequenceWithSteps } from "@shared/schema";
 
 export default function Sequences() {
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
+  const [selectedSequence, setSelectedSequence] = useState<SequenceWithSteps | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,16 +51,50 @@ export default function Sequences() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Sequences...</div>
-          <div className="text-muted-foreground">Fetching your email sequences</div>
-        </div>
-      </div>
-    );
-  }
+  const handleUseInCampaign = (sequence: Sequence) => {
+    // Store sequence data in localStorage for campaign creation
+    localStorage.setItem('selectedSequenceForCampaign', JSON.stringify({
+      id: sequence.id,
+      name: sequence.name,
+      description: sequence.description,
+      steps: sequence.steps,
+      isActive: sequence.isActive
+    }));
+    
+    // Navigate to campaigns page
+            window.location.href = '/dashboard/campaigns?useSequence=true';
+  };
+
+  const handleViewDetails = async (sequence: Sequence) => {
+    try {
+      // Fetch the complete sequence with steps
+      const response = await fetch(`/api/sequences/${sequence.id}`, {
+        headers: {
+          'Authorization': `Bearer ${await window.Clerk?.session?.getToken()}`,
+        },
+      });
+      
+      if (response.ok) {
+        const sequenceWithSteps = await response.json();
+        setSelectedSequence(sequenceWithSteps);
+        setIsViewDetailsOpen(true);
+      } else {
+        toast({
+          title: "Failed to load sequence details",
+          description: "Could not retrieve sequence information.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error loading sequence details",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Remove loading state - show content immediately
 
   return (
     <div>
@@ -80,6 +116,9 @@ export default function Sequences() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Email Sequence</DialogTitle>
+              <DialogDescription>
+                Create a new email sequence to automate your outreach campaigns.
+              </DialogDescription>
             </DialogHeader>
             <SequenceForm 
               onSuccess={() => setIsFormOpen(false)}
@@ -88,6 +127,86 @@ export default function Sequences() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sequence Details: {selectedSequence?.name}</DialogTitle>
+            <DialogDescription>
+              View the details and email steps for this sequence.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSequence && (
+            <div className="space-y-6">
+              {/* Sequence Info */}
+              <div className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium mb-2">Sequence Information</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Name:</span>
+                      <span className="font-medium">{selectedSequence.name}</span>
+                    </div>
+                    {selectedSequence.description && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Description:</span>
+                        <span className="font-medium">{selectedSequence.description}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge className={selectedSequence.isActive ? "badge-success" : "badge-secondary"}>
+                        {selectedSequence.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Created:</span>
+                      <span>{new Date(selectedSequence.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Last Updated:</span>
+                      <span>{new Date(selectedSequence.updatedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email Steps */}
+              <div className="space-y-4">
+                <h4 className="font-medium">Email Steps</h4>
+                {selectedSequence.steps && selectedSequence.steps.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedSequence.steps.map((step, index) => (
+                      <div key={index} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="font-medium">Step {step.stepNumber}</h5>
+                          <Badge variant="outline">{step.delayDays} day{step.delayDays !== 1 ? 's' : ''} delay</Badge>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-sm font-medium text-muted-foreground">Subject:</span>
+                            <p className="text-sm">{step.subject}</p>
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium text-muted-foreground">Body:</span>
+                            <p className="text-sm whitespace-pre-wrap">{step.body}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No email steps found for this sequence.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Sequences Grid */}
       {sequences.length > 0 ? (
@@ -123,7 +242,10 @@ export default function Sequences() {
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem data-testid={`sequence-use-${sequence.id}`}>
+                      <DropdownMenuItem 
+                        onClick={() => handleUseInCampaign(sequence)}
+                        data-testid={`sequence-use-${sequence.id}`}
+                      >
                         <Play className="h-4 w-4 mr-2" />
                         Use in Campaign
                       </DropdownMenuItem>
@@ -157,6 +279,7 @@ export default function Sequences() {
                     <Button 
                       variant="outline" 
                       size="sm"
+                      onClick={() => handleViewDetails(sequence)}
                       data-testid={`sequence-view-${sequence.id}`}
                     >
                       View Details
@@ -186,6 +309,9 @@ export default function Sequences() {
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Email Sequence</DialogTitle>
+                <DialogDescription>
+                  Create a new email sequence to automate your outreach campaigns.
+                </DialogDescription>
               </DialogHeader>
               <SequenceForm 
                 onSuccess={() => setIsFormOpen(false)}

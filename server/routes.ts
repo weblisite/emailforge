@@ -1,152 +1,108 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import session from "express-session";
 import { storage } from "./storage";
-import { authService } from "./services/auth";
 import { emailService } from "./services/email";
 import { deliverabilityService } from "./services/deliverability";
-import { insertUserSchema, insertEmailAccountSchema, insertLeadSchema, insertSequenceSchema, insertCampaignSchema } from "@shared/schema";
+import { insertEmailAccountSchema, updateEmailAccountSchema, insertLeadSchema, updateLeadSchema, insertSequenceSchema, updateSequenceSchema, insertSequenceStepSchema, updateSequenceStepSchema, insertCampaignSchema, updateCampaignSchema } from "@shared/schema";
+import { requireClerkAuth, getCurrentUser } from "./middleware/auth";
 import { z } from "zod";
 
-declare module "express-session" {
-  interface SessionData {
-    userId?: string;
-  }
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Session middleware
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'default-secret-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
-  }));
+  // Remove session middleware - Clerk handles authentication
+  
+  // Create HTTP server
+  const server = createServer(app);
 
-  // Auth middleware
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-    next();
-  };
-
-  // Auth routes
-  app.post('/api/auth/register', async (req, res) => {
+  // Email Accounts routes
+  app.post('/api/email-accounts', requireClerkAuth, async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
-      const user = await authService.register(userData);
-      req.session.userId = user.id;
-      res.json({ user: { id: user.id, email: user.email, name: user.name } });
-    } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Registration failed' });
-    }
-  });
-
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const user = await authService.login(email, password);
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
       }
-      req.session.userId = user.id;
-      res.json({ user: { id: user.id, email: user.email, name: user.name } });
-    } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Login failed' });
-    }
-  });
 
-  app.post('/api/auth/logout', (req, res) => {
-    req.session.destroy(() => {
-      res.json({ message: 'Logged out successfully' });
-    });
-  });
+      const emailAccountData = insertEmailAccountSchema.parse(req.body);
+      const emailAccount = await storage.createEmailAccount({
+        ...emailAccountData,
+        userId: currentUser.id,
+      });
 
-  app.get('/api/auth/me', requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      // Test the connection
+      try {
+        const testResult = await emailService.testEmailAccount(emailAccount);
+        await storage.updateEmailAccount(emailAccount.id, {
+          status: testResult.success ? 'active' : 'error',
+          errorMessage: testResult.success ? null : testResult.error,
+          lastTested: new Date(),
+        });
+      } catch (testError) {
+        await storage.updateEmailAccount(emailAccount.id, {
+          status: 'error',
+          errorMessage: testError instanceof Error ? testError.message : 'Connection test failed',
+          lastTested: new Date(),
+        });
       }
-      res.json({ user: { id: user.id, email: user.email, name: user.name } });
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get user' });
-    }
-  });
 
-  // Dashboard metrics
-  app.get('/api/dashboard/metrics', requireAuth, async (req, res) => {
-    try {
-      const metrics = await storage.getDashboardMetrics(req.session.userId!);
-      res.json(metrics);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get metrics' });
-    }
-  });
-
-  // Email accounts
-  app.get('/api/email-accounts', requireAuth, async (req, res) => {
-    try {
-      const accounts = await storage.getEmailAccounts(req.session.userId!);
-      res.json(accounts);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get email accounts' });
-    }
-  });
-
-  app.post('/api/email-accounts', requireAuth, async (req, res) => {
-    try {
-      const accountData = insertEmailAccountSchema.parse(req.body);
-      
-      // Encrypt password
-      const encryptedPassword = emailService.encryptPassword(accountData.username);
-      
-      // Test connection
-      const testResult = await emailService.testEmailConnection({
-        smtpHost: accountData.smtpHost,
-        smtpPort: accountData.smtpPort,
-        username: accountData.username,
-        password: accountData.username // Using username as password for demo
-      });
-
-      const account = await storage.createEmailAccount({
-        ...accountData,
-        userId: req.session.userId!,
-        encryptedPassword
-      });
-
-      // Update account with test results
-      const updatedAccount = await storage.updateEmailAccount(account.id, {
-        status: testResult.success ? 'active' : 'error',
-        errorMessage: testResult.error,
-        lastTested: new Date()
-      });
-
-      res.json(updatedAccount);
+      res.json(emailAccount);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create email account' });
     }
   });
 
-  app.put('/api/email-accounts/:id', requireAuth, async (req, res) => {
+  app.get('/api/email-accounts', requireClerkAuth, async (req, res) => {
     try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      if (updates.username) {
-        updates.encryptedPassword = emailService.encryptPassword(updates.username);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
       }
-      
-      const account = await storage.updateEmailAccount(id, updates);
-      res.json(account);
+
+      const emailAccounts = await storage.getEmailAccounts(currentUser.id);
+      res.json(emailAccounts);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get email accounts' });
+    }
+  });
+
+  app.put('/api/email-accounts/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailAccount = await storage.getEmailAccount(req.params.id);
+      if (!emailAccount) {
+        return res.status(404).json({ message: 'Email account not found' });
+      }
+
+      if (emailAccount.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updateData = updateEmailAccountSchema.parse(req.body);
+      const updatedAccount = await storage.updateEmailAccount(req.params.id, updateData);
+      res.json(updatedAccount);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update email account' });
     }
   });
 
-  app.delete('/api/email-accounts/:id', requireAuth, async (req, res) => {
+  app.delete('/api/email-accounts/:id', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailAccount = await storage.getEmailAccount(req.params.id);
+      if (!emailAccount) {
+        return res.status(404).json({ message: 'Email account not found' });
+      }
+
+      if (emailAccount.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
       await storage.deleteEmailAccount(req.params.id);
       res.json({ message: 'Email account deleted successfully' });
     } catch (error) {
@@ -154,25 +110,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/email-accounts/:id/test', requireAuth, async (req, res) => {
+  app.post('/api/email-accounts/:id/test', requireClerkAuth, async (req, res) => {
     try {
-      const account = await storage.getEmailAccount(req.params.id);
-      if (!account) {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailAccount = await storage.getEmailAccount(req.params.id);
+      if (!emailAccount) {
         return res.status(404).json({ message: 'Email account not found' });
       }
 
-      const password = emailService.decryptPassword(account.encryptedPassword);
-      const testResult = await emailService.testEmailConnection({
-        smtpHost: account.smtpHost,
-        smtpPort: account.smtpPort,
-        username: account.username,
-        password
-      });
+      if (emailAccount.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
-      await storage.updateEmailAccount(account.id, {
+      const testResult = await emailService.testEmailAccount(emailAccount);
+      
+      await storage.updateEmailAccount(emailAccount.id, {
         status: testResult.success ? 'active' : 'error',
-        errorMessage: testResult.error,
-        lastTested: new Date()
+        errorMessage: testResult.success ? null : testResult.error,
+        lastTested: new Date(),
       });
 
       res.json(testResult);
@@ -181,50 +140,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Leads
-  app.get('/api/leads', requireAuth, async (req, res) => {
+  // Leads routes
+  app.post('/api/leads', requireClerkAuth, async (req, res) => {
     try {
-      const leads = await storage.getLeads(req.session.userId!);
-      res.json(leads);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get leads' });
-    }
-  });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
 
-  app.post('/api/leads', requireAuth, async (req, res) => {
-    try {
       const leadData = insertLeadSchema.parse(req.body);
-      const lead = await storage.createLead({ ...leadData, userId: req.session.userId! });
+      const lead = await storage.createLead({
+        ...leadData,
+        userId: currentUser.id,
+      });
       res.json(lead);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create lead' });
     }
   });
 
-  app.post('/api/leads/bulk', requireAuth, async (req, res) => {
+  app.post('/api/leads/bulk', requireClerkAuth, async (req, res) => {
     try {
-      const { leads } = req.body;
-      const leadsData = z.array(insertLeadSchema).parse(leads);
-      const createdLeads = await storage.createLeads(
-        leadsData.map(lead => ({ ...lead, userId: req.session.userId! }))
-      );
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const leadsData = req.body;
+      if (!Array.isArray(leadsData)) {
+        return res.status(400).json({ message: 'Leads data must be an array' });
+      }
+
+      const createdLeads = [];
+      for (const leadData of leadsData) {
+        try {
+          const validatedData = insertLeadSchema.parse(leadData);
+          const lead = await storage.createLead({
+            ...validatedData,
+            userId: currentUser.id,
+          });
+          createdLeads.push(lead);
+        } catch (validationError) {
+          console.error('Validation error for lead:', validationError);
+        }
+      }
+
       res.json(createdLeads);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create leads' });
     }
   });
 
-  app.put('/api/leads/:id', requireAuth, async (req, res) => {
+  app.get('/api/leads', requireClerkAuth, async (req, res) => {
     try {
-      const lead = await storage.updateLead(req.params.id, req.body);
-      res.json(lead);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const leads = await storage.getLeads(currentUser.id);
+      res.json(leads);
     } catch (error) {
-      res.status(400).json({ message: 'Failed to update lead' });
+      res.status(500).json({ message: 'Failed to get leads' });
     }
   });
 
-  app.delete('/api/leads/:id', requireAuth, async (req, res) => {
+  app.put('/api/leads/:id', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: 'Lead not found' });
+      }
+
+      if (lead.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      console.log('🔍 Lead update request:', {
+        leadId: req.params.id,
+        currentStatus: lead.status,
+        requestBody: req.body,
+        userId: currentUser.id
+      });
+
+      const updateData = updateLeadSchema.parse(req.body);
+      console.log('🔍 Parsed update data:', updateData);
+
+      const updatedLead = await storage.updateLead(req.params.id, updateData);
+      console.log('🔍 Updated lead result:', updatedLead);
+
+      res.json(updatedLead);
+    } catch (error) {
+      console.error('❌ Lead update error:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update lead' });
+    }
+  });
+
+  app.delete('/api/leads/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: 'Lead not found' });
+      }
+
+      if (lead.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
       await storage.deleteLead(req.params.id);
       res.json({ message: 'Lead deleted successfully' });
     } catch (error) {
@@ -232,55 +264,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Sequences
-  app.get('/api/sequences', requireAuth, async (req, res) => {
+  // Sequences routes
+  app.post('/api/sequences', requireClerkAuth, async (req, res) => {
     try {
-      const sequences = await storage.getSequences(req.session.userId!);
-      res.json(sequences);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get sequences' });
-    }
-  });
-
-  app.get('/api/sequences/:id', requireAuth, async (req, res) => {
-    try {
-      const sequence = await storage.getSequenceWithSteps(req.params.id);
-      if (!sequence) {
-        return res.status(404).json({ message: 'Sequence not found' });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
       }
-      res.json(sequence);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to get sequence' });
-    }
-  });
 
-  app.post('/api/sequences', requireAuth, async (req, res) => {
-    try {
-      const { sequence, steps } = req.body;
-      const sequenceData = insertSequenceSchema.parse(sequence);
+      const { steps, ...sequenceData } = req.body;
+      const validatedSequenceData = insertSequenceSchema.parse(sequenceData);
       
-      const createdSequence = await storage.createSequence({ 
-        ...sequenceData, 
-        userId: req.session.userId! 
+      const sequence = await storage.createSequence({
+        ...validatedSequenceData,
+        userId: currentUser.id,
       });
 
-      // Create steps
-      for (const step of steps) {
-        await storage.createSequenceStep({
-          ...step,
-          sequenceId: createdSequence.id
-        });
+      // Create sequence steps if provided
+      if (steps && Array.isArray(steps) && steps.length > 0) {
+        for (const step of steps) {
+          await storage.createSequenceStep({
+            sequenceId: sequence.id,
+            stepNumber: step.stepNumber,
+            subject: step.subject,
+            body: step.body,
+            delayDays: step.delayDays,
+          });
+        }
       }
 
-      const sequenceWithSteps = await storage.getSequenceWithSteps(createdSequence.id);
+      // Return the sequence with steps
+      const sequenceWithSteps = await storage.getSequenceWithSteps(sequence.id);
       res.json(sequenceWithSteps);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create sequence' });
     }
   });
 
-  app.delete('/api/sequences/:id', requireAuth, async (req, res) => {
+  app.get('/api/sequences', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const sequences = await storage.getSequences(currentUser.id);
+      res.json(sequences);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get sequences' });
+    }
+  });
+
+  app.get('/api/sequences/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const sequence = await storage.getSequenceWithSteps(req.params.id);
+      if (!sequence) {
+        return res.status(404).json({ message: 'Sequence not found' });
+      }
+
+      if (sequence.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      res.json(sequence);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get sequence' });
+    }
+  });
+
+  app.put('/api/sequences/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const sequence = await storage.getSequence(req.params.id);
+      if (!sequence) {
+        return res.status(404).json({ message: 'Sequence not found' });
+      }
+
+      if (sequence.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updateData = updateSequenceSchema.parse(req.body);
+      const updatedSequence = await storage.updateSequence(req.params.id, updateData);
+      res.json(updatedSequence);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update sequence' });
+    }
+  });
+
+  app.delete('/api/sequences/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const sequence = await storage.getSequence(req.params.id);
+      if (!sequence) {
+        return res.status(404).json({ message: 'Sequence not found' });
+      }
+
+      if (sequence.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
       await storage.deleteSequence(req.params.id);
       res.json({ message: 'Sequence deleted successfully' });
     } catch (error) {
@@ -288,22 +384,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Campaigns
-  app.get('/api/campaigns', requireAuth, async (req, res) => {
+  // Sequence Steps routes
+  app.post('/api/sequence-steps', requireClerkAuth, async (req, res) => {
     try {
-      const campaigns = await storage.getCampaigns(req.session.userId!);
-      res.json(campaigns);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const stepData = req.body;
+      const step = await storage.createSequenceStep({
+        ...stepData,
+        userId: currentUser.id
+      });
+
+      res.status(201).json(step);
     } catch (error) {
-      res.status(500).json({ message: 'Failed to get campaigns' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create sequence step' });
     }
   });
 
-  app.post('/api/campaigns', requireAuth, async (req, res) => {
+  app.put('/api/sequence-steps/:id', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const step = await storage.getSequenceStep(req.params.id);
+      if (!step) {
+        return res.status(404).json({ message: 'Sequence step not found' });
+      }
+
+      if (step.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updateData = req.body;
+      const updatedStep = await storage.updateSequenceStep(req.params.id, updateData);
+      res.json(updatedStep);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update sequence step' });
+    }
+  });
+
+  app.delete('/api/sequence-steps/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const step = await storage.getSequenceStep(req.params.id);
+      if (!step) {
+        return res.status(404).json({ message: 'Sequence step not found' });
+      }
+
+      if (step.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      await storage.deleteSequenceStep(req.params.id);
+      res.json({ message: 'Sequence step deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete sequence step' });
+    }
+  });
+
+  // Campaigns routes
+  app.post('/api/campaigns', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
       const campaignData = insertCampaignSchema.parse(req.body);
       const campaign = await storage.createCampaign({ 
         ...campaignData, 
-        userId: req.session.userId! 
+        userId: currentUser.id,
       });
       res.json(campaign);
     } catch (error) {
@@ -311,17 +470,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/campaigns/:id', requireAuth, async (req, res) => {
+  app.get('/api/campaigns', requireClerkAuth, async (req, res) => {
     try {
-      const campaign = await storage.updateCampaign(req.params.id, req.body);
-      res.json(campaign);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const campaigns = await storage.getCampaigns(currentUser.id);
+      res.json(campaigns);
     } catch (error) {
-      res.status(400).json({ message: 'Failed to update campaign' });
+      res.status(500).json({ message: 'Failed to get campaigns' });
     }
   });
 
-  app.delete('/api/campaigns/:id', requireAuth, async (req, res) => {
+  app.put('/api/campaigns/:id', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ message: 'Campaign not found' });
+      }
+
+      if (campaign.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updateData = updateCampaignSchema.parse(req.body);
+      const updatedCampaign = await storage.updateCampaign(req.params.id, updateData);
+      res.json(updatedCampaign);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update campaign' });
+    }
+  });
+
+  app.delete('/api/campaigns/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ message: 'Campaign not found' });
+      }
+
+      if (campaign.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
       await storage.deleteCampaign(req.params.id);
       res.json({ message: 'Campaign deleted successfully' });
     } catch (error) {
@@ -329,45 +531,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Campaign actions
-  app.post('/api/campaigns/:id/start', requireAuth, async (req, res) => {
+  // Campaign Emails routes
+  app.get('/api/campaigns/:id/emails', requireClerkAuth, async (req, res) => {
     try {
-      const campaign = await storage.updateCampaign(req.params.id, {
-        status: 'active',
-        startedAt: new Date()
-      });
-      res.json(campaign);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to start campaign' });
-    }
-  });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
 
-  app.post('/api/campaigns/:id/pause', requireAuth, async (req, res) => {
-    try {
-      const campaign = await storage.updateCampaign(req.params.id, {
-        status: 'paused'
-      });
-      res.json(campaign);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to pause campaign' });
-    }
-  });
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ message: 'Campaign not found' });
+      }
 
-  app.post('/api/campaigns/:id/stop', requireAuth, async (req, res) => {
-    try {
-      const campaign = await storage.updateCampaign(req.params.id, {
-        status: 'completed',
-        completedAt: new Date()
-      });
-      res.json(campaign);
-    } catch (error) {
-      res.status(500).json({ message: 'Failed to stop campaign' });
-    }
-  });
+      if (campaign.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
-  // Get campaign emails
-  app.get('/api/campaigns/:id/emails', requireAuth, async (req, res) => {
-    try {
       const emails = await storage.getCampaignEmails(req.params.id);
       res.json(emails);
     } catch (error) {
@@ -375,139 +555,545 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Inbox
-  app.get('/api/inbox', requireAuth, async (req, res) => {
+  app.post('/api/campaign-emails', requireClerkAuth, async (req, res) => {
     try {
-      const messages = await storage.getInboxMessages(req.session.userId!);
-      res.json(messages);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailData = req.body;
+      const email = await storage.createCampaignEmail({
+        ...emailData,
+        userId: currentUser.id
+      });
+
+      res.status(201).json(email);
     } catch (error) {
-      res.status(500).json({ message: 'Failed to get inbox messages' });
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create campaign email' });
     }
   });
 
-  app.put('/api/inbox/:id/read', requireAuth, async (req, res) => {
+  app.put('/api/campaign-emails/:id', requireClerkAuth, async (req, res) => {
     try {
-      await storage.markMessageRead(req.params.id);
-      res.json({ message: 'Message marked as read' });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const email = await storage.getCampaignEmail(req.params.id);
+      if (!email) {
+        return res.status(404).json({ message: 'Campaign email not found' });
+      }
+
+      if (email.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updateData = req.body;
+      const updatedEmail = await storage.updateCampaignEmail(req.params.id, updateData);
+      res.json(updatedEmail);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to update campaign email' });
+    }
+  });
+
+  app.delete('/api/campaign-emails/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const email = await storage.getCampaignEmail(req.params.id);
+      if (!email) {
+        return res.status(404).json({ message: 'Campaign email not found' });
+      }
+
+      if (email.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      await storage.deleteCampaignEmail(req.params.id);
+      res.json({ message: 'Campaign email deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete campaign email' });
+    }
+  });
+
+  // Dashboard metrics
+  app.get('/api/dashboard/metrics', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const metrics = await storage.getDashboardMetrics(currentUser.id);
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get dashboard metrics' });
+    }
+  });
+
+  // Inbox routes
+  app.get('/api/inbox', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const inboxItems = await storage.getInboxMessages(currentUser.id);
+      res.json(inboxItems);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get inbox items' });
+    }
+  });
+
+  app.post('/api/inbox', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const messageData = req.body;
+      const message = await storage.createInboxMessage({
+        ...messageData,
+        userId: currentUser.id
+      });
+
+      res.status(201).json(message);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create inbox message' });
+    }
+  });
+
+  app.put('/api/inbox/:id/read', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const message = await storage.getInboxMessage(req.params.id);
+      if (!message) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+
+      if (message.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updatedMessage = await storage.markMessageRead(req.params.id);
+      res.json(updatedMessage);
     } catch (error) {
       res.status(500).json({ message: 'Failed to mark message as read' });
     }
   });
 
-  // Sync inbox from email accounts
-  app.post('/api/inbox/sync', requireAuth, async (req, res) => {
+  app.delete('/api/inbox/:id', requireClerkAuth, async (req, res) => {
     try {
-      const accounts = await storage.getEmailAccounts(req.session.userId!);
-      const results = [];
-
-      for (const account of accounts) {
-        if (account.isActive && account.status === 'active') {
-          try {
-            const password = emailService.decryptPassword(account.encryptedPassword);
-            const result = await emailService.checkInboxMessages({
-              imapHost: account.imapHost,
-              imapPort: account.imapPort,
-              username: account.username,
-              password
-            });
-
-            if (result.success && result.messages) {
-              // Process and store new messages
-              for (const message of result.messages) {
-                const headers = message.parts?.find((p: any) => p.which === 'HEADER')?.body;
-                if (headers) {
-                  await storage.createInboxMessage({
-                    userId: req.session.userId!,
-                    emailAccountId: account.id,
-                    fromEmail: headers.from?.[0] || 'unknown',
-                    fromName: headers.from?.[0]?.split('<')[0]?.trim() || null,
-                    subject: headers.subject?.[0] || 'No Subject',
-                    body: 'Message body', // Would parse actual body in real implementation
-                    messageId: headers['message-id']?.[0] || `msg-${Date.now()}`,
-                    threadId: headers['thread-id']?.[0] || null,
-                    receivedAt: headers.date?.[0] ? new Date(headers.date[0]) : new Date()
-                  });
-                }
-              }
-            }
-
-            results.push({ accountId: account.id, success: result.success, messageCount: result.messages?.length || 0 });
-          } catch (error) {
-            results.push({ accountId: account.id, success: false, error: error instanceof Error ? error.message : 'Sync failed' });
-          }
-        }
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
       }
 
-      res.json({ results });
+      const message = await storage.getInboxMessage(req.params.id);
+      if (!message) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+
+      if (message.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      await storage.deleteInboxMessage(req.params.id);
+      res.json({ message: 'Message deleted successfully' });
     } catch (error) {
-      res.status(500).json({ message: 'Failed to sync inbox' });
+      res.status(500).json({ message: 'Failed to delete message' });
     }
   });
 
-  // Deliverability testing
-  app.post('/api/deliverability/test', requireAuth, async (req, res) => {
+  // Deliverability routes
+  app.post('/api/deliverability/test', requireClerkAuth, async (req, res) => {
     try {
-      const { fromEmail, subject, body } = req.body;
-      const result = await deliverabilityService.testDeliverability({
-        fromEmail,
-        subject,
-        body
-      });
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { emailContent, fromEmail } = req.body;
+      const result = await deliverabilityService.testDeliverability(emailContent, fromEmail);
       res.json(result);
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Deliverability test failed' });
+      res.status(500).json({ message: 'Failed to test deliverability' });
     }
   });
 
-  app.post('/api/deliverability/domain-reputation', requireAuth, async (req, res) => {
+  app.post('/api/deliverability/domain-reputation', requireClerkAuth, async (req, res) => {
     try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
       const { domain } = req.body;
       const result = await deliverabilityService.checkDomainReputation(domain);
       res.json(result);
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Domain reputation check failed' });
+      res.status(500).json({ message: 'Failed to check domain reputation' });
     }
   });
 
-  // Email template validation
-  app.post('/api/templates/validate', requireAuth, async (req, res) => {
+  // Profile update route
+  app.put('/api/auth/profile', requireClerkAuth, async (req, res) => {
     try {
-      const { template } = req.body;
-      const result = emailService.validateEmailTemplate(template);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { name, email } = req.body;
+      
+      // Validate input
+      if (!name || !email) {
+        return res.status(400).json({ message: 'Name and email are required' });
+      }
+      
+      // Check if email is already taken by another user
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser && existingUser.id !== currentUser.id) {
+        return res.status(400).json({ message: 'Email is already taken' });
+      }
+      
+      // Update user profile
+      const updatedUser = await storage.updateUser(currentUser.id, { name, email });
+      res.json({ user: { id: updatedUser.id, email: updatedUser.email, name: updatedUser.name } });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to update profile' });
+    }
+  });
+
+  // Bulk Operations routes
+  app.delete('/api/leads/bulk', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Invalid IDs array' });
+      }
+
+      const deletedCount = await storage.deleteLeadsBulk(ids, currentUser.id);
+      res.json({ message: `${deletedCount} leads deleted successfully` });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete leads' });
+    }
+  });
+
+  app.delete('/api/email-accounts/bulk', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Invalid IDs array' });
+      }
+
+      const deletedCount = await storage.deleteEmailAccountsBulk(ids, currentUser.id);
+      res.json({ message: `${deletedCount} email accounts deleted successfully` });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete email accounts' });
+    }
+  });
+
+  app.delete('/api/sequences/bulk', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Invalid IDs array' });
+      }
+
+      const deletedCount = await storage.deleteSequencesBulk(ids, currentUser.id);
+      res.json({ message: `${deletedCount} sequences deleted successfully` });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete sequences' });
+    }
+  });
+
+  app.delete('/api/campaigns/bulk', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Invalid IDs array' });
+      }
+
+      const deletedCount = await storage.deleteCampaignsBulk(ids, currentUser.id);
+      res.json({ message: `${deletedCount} campaigns deleted successfully` });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete campaigns' });
+    }
+  });
+
+  // Search & Filtering routes
+  app.get('/api/leads/search', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: 'Search query required' });
+      }
+
+      const results = await storage.searchLeads(q, currentUser.id);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to search leads' });
+    }
+  });
+
+  app.get('/api/inbox/search', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: 'Search query required' });
+      }
+
+      const results = await storage.searchInbox(q, currentUser.id);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to search inbox' });
+    }
+  });
+
+  app.post('/api/campaigns/filter', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const filters = req.body;
+      const results = await storage.filterCampaigns(filters, currentUser.id);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to filter campaigns' });
+    }
+  });
+
+  // Email Sending routes
+  app.post('/api/email/send', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailData = req.body;
+      const result = await storage.sendEmail(emailData, currentUser.id);
       res.json(result);
     } catch (error) {
-      res.status(500).json({ message: 'Template validation failed' });
+      res.status(500).json({ message: 'Failed to send email' });
     }
   });
 
-  // Test email sending
-  app.post('/api/email/test-send', requireAuth, async (req, res) => {
+  app.post('/api/email/bulk-send', requireClerkAuth, async (req, res) => {
     try {
-      const { emailAccountId, to, subject, body } = req.body;
-      
-      const account = await storage.getEmailAccount(emailAccountId);
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailData = req.body;
+      const result = await storage.sendBulkEmails(emailData, currentUser.id);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to send bulk emails' });
+    }
+  });
+
+  app.post('/api/email/schedule', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const emailData = req.body;
+      const result = await storage.scheduleEmail(emailData, currentUser.id);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to schedule email' });
+    }
+  });
+
+  // Analytics & Reporting routes
+  app.get('/api/analytics/campaigns/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ message: 'Campaign not found' });
+      }
+
+      if (campaign.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const analytics = await storage.getCampaignAnalytics(req.params.id);
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get campaign analytics' });
+    }
+  });
+
+  app.get('/api/analytics/leads/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: 'Lead not found' });
+      }
+
+      if (lead.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const analytics = await storage.getLeadAnalytics(req.params.id);
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get lead analytics' });
+    }
+  });
+
+  app.get('/api/analytics/email-accounts/:id', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const account = await storage.getEmailAccount(req.params.id);
       if (!account) {
         return res.status(404).json({ message: 'Email account not found' });
       }
 
-      const password = emailService.decryptPassword(account.encryptedPassword);
-      const result = await emailService.sendEmail({
-        smtpHost: account.smtpHost,
-        smtpPort: account.smtpPort,
-        username: account.username,
-        password,
-        to,
-        subject,
-        body,
-        fromName: account.name
-      });
+      if (account.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
-      res.json(result);
+      const analytics = await storage.getEmailAccountAnalytics(req.params.id);
+      res.json(analytics);
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Test email failed' });
+      res.status(500).json({ message: 'Failed to get email account analytics' });
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  app.post('/api/export', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const { type, filters } = req.body;
+      const exportData = await storage.exportData(type, filters, currentUser.id);
+      res.json(exportData);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to export data' });
+    }
+  });
+
+  // Notifications & Webhooks routes
+  app.get('/api/notifications', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const notifications = await storage.getNotifications(currentUser.id);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get notifications' });
+    }
+  });
+
+  app.put('/api/notifications/:id/read', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const notification = await storage.getNotification(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ message: 'Notification not found' });
+      }
+
+      if (notification.userId !== currentUser.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const updatedNotification = await storage.markNotificationRead(req.params.id);
+      res.json(updatedNotification);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to mark notification as read' });
+    }
+  });
+
+  app.post('/api/webhooks', requireClerkAuth, async (req, res) => {
+    try {
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      const webhookData = req.body;
+      const webhook = await storage.createWebhook({
+        ...webhookData,
+        userId: currentUser.id
+      });
+
+      res.status(201).json(webhook);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create webhook' });
+    }
+  });
+
+  return server;
 }

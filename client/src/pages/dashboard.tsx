@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   RefreshCw, 
   Plus, 
@@ -9,7 +9,10 @@ import {
   Upload,
   FileText,
   Shield,
-  TrendingUp
+  TrendingUp,
+  BookmarkCheck,
+  Calendar,
+  Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +26,7 @@ import { Progress } from "@/components/ui/progress";
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Fetch dashboard data
   const { data: metrics, isLoading: metricsLoading, refetch: refetchMetrics } = useQuery({
@@ -35,14 +39,63 @@ export default function Dashboard() {
     queryFn: () => api.getCampaigns(),
   });
 
+  // Fetch campaign analytics for active campaigns
+  const { data: campaignAnalytics = [], isLoading: analyticsLoading } = useQuery({
+    queryKey: ['/api/campaigns/analytics'],
+    queryFn: async () => {
+      const activeCampaigns = campaigns.filter(c => c.status === 'active');
+      const analyticsPromises = activeCampaigns.map(campaign => 
+        api.getCampaignAnalytics(campaign.id)
+      );
+      return Promise.all(analyticsPromises);
+    },
+    enabled: campaigns.length > 0 && !campaignsLoading,
+  });
+
   const { data: emailAccounts = [], isLoading: accountsLoading } = useQuery({
     queryKey: ['/api/email-accounts'],
     queryFn: () => api.getEmailAccounts(),
   });
 
+  // Fetch email account analytics
+  const { data: accountAnalytics = [], isLoading: accountAnalyticsLoading } = useQuery({
+    queryKey: ['/api/email-accounts/analytics'],
+    queryFn: async () => {
+      const analyticsPromises = emailAccounts.map(account => 
+        api.getEmailAccountAnalytics(account.id)
+      );
+      return Promise.all(analyticsPromises);
+    },
+    enabled: emailAccounts.length > 0 && !accountsLoading,
+  });
+
   const { data: inboxMessages = [], isLoading: inboxLoading } = useQuery({
     queryKey: ['/api/inbox'],
     queryFn: () => api.getInboxMessages(),
+  });
+
+  // Mark all messages as read mutation
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      const unreadMessages = inboxMessages.filter(m => !m.isRead);
+      const promises = unreadMessages.map(message => api.markMessageRead(message.id));
+      await Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/inbox'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/metrics'] });
+      toast({
+        title: "All messages marked as read",
+        description: "Your inbox has been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to mark messages as read",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleRefresh = async () => {
@@ -63,16 +116,7 @@ export default function Dashboard() {
 
   const activeCampaigns = campaigns.filter(c => c.status === 'active');
 
-  if (metricsLoading || campaignsLoading || accountsLoading || inboxLoading) {
-    return (
-      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '400px' }}>
-        <div className="text-center">
-          <div className="animate-pulse text-xl font-medium text-primary mb-2">Loading Dashboard...</div>
-          <div className="text-muted-foreground">Fetching your campaign data</div>
-        </div>
-      </div>
-    );
-  }
+  // Remove loading state - show content immediately
 
   return (
     <div>
@@ -93,7 +137,10 @@ export default function Dashboard() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button data-testid="button-create-campaign">
+          <Button 
+            data-testid="button-create-campaign"
+            onClick={() => window.location.href = '/dashboard/campaigns'}
+          >
             <Plus className="h-4 w-4 mr-2" />
             New Campaign
           </Button>
@@ -158,7 +205,12 @@ export default function Dashboard() {
           <div className="metric-card">
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h5 className="mb-0">Active Campaigns</h5>
-              <Button variant="outline" size="sm" data-testid="button-view-all-campaigns">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                data-testid="button-view-all-campaigns"
+                onClick={() => window.location.href = '/dashboard/campaigns'}
+              >
                 View All
               </Button>
             </div>
@@ -172,21 +224,52 @@ export default function Dashboard() {
           <div className="metric-card mb-4">
             <h5 className="mb-3">Quick Actions</h5>
             <div className="d-grid gap-2">
-              <Button data-testid="button-upload-leads">
+              <Button 
+                data-testid="button-upload-leads"
+                onClick={() => window.location.href = '/dashboard/leads'}
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Leads
               </Button>
-              <Button variant="outline" data-testid="button-add-email-account">
+              <Button 
+                variant="outline" 
+                data-testid="button-add-email-account"
+                onClick={() => window.location.href = '/dashboard/email-accounts'}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Email Account
               </Button>
-              <Button variant="outline" data-testid="button-create-sequence">
+              <Button 
+                variant="outline" 
+                data-testid="button-create-sequence"
+                onClick={() => window.location.href = '/dashboard/sequences'}
+              >
                 <FileText className="h-4 w-4 mr-2" />
                 Create Sequence
               </Button>
-              <Button variant="outline" data-testid="button-test-deliverability">
+              <Button 
+                variant="outline" 
+                data-testid="button-test-deliverability"
+                onClick={() => window.location.href = '/dashboard/settings'}
+              >
                 <Shield className="h-4 w-4 mr-2" />
                 Test Deliverability
+              </Button>
+              <Button 
+                variant="outline" 
+                data-testid="button-schedule-email"
+                onClick={() => window.location.href = '/dashboard/email-schedule'}
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Schedule Email
+              </Button>
+              <Button 
+                variant="outline" 
+                data-testid="button-bulk-email"
+                onClick={() => window.location.href = '/dashboard/bulk-email'}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Bulk Email
               </Button>
             </div>
           </div>
@@ -202,8 +285,24 @@ export default function Dashboard() {
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h5 className="mb-0">Recent Inbox Activity</h5>
               <div className="d-flex gap-2">
-                <Button variant="outline" size="sm" data-testid="button-mark-all-read">
-                  Mark All Read
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  data-testid="button-mark-all-read"
+                  onClick={() => markAllReadMutation.mutate()}
+                  disabled={markAllReadMutation.isPending}
+                >
+                  {markAllReadMutation.isPending ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Marking...
+                    </>
+                  ) : (
+                    <>
+                      <BookmarkCheck className="h-4 w-4 mr-2" />
+                      Mark All Read
+                    </>
+                  )}
                 </Button>
                 <Button size="sm" data-testid="button-open-inbox">
                   View Inbox
