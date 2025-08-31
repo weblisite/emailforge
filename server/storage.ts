@@ -166,7 +166,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEmailAccount(id: string): Promise<void> {
-    await db.delete(emailAccounts).where(eq(emailAccounts.id, id));
+    try {
+      console.log(`🔍 Storage: Deleting email account ${id}`);
+      const result = await db.delete(emailAccounts).where(eq(emailAccounts.id, id));
+      console.log(`✅ Storage: Email account ${id} deleted successfully`);
+    } catch (error) {
+      console.error(`❌ Storage: Failed to delete email account ${id}:`, error);
+      throw error;
+    }
   }
 
   async getLeads(userId: string): Promise<Lead[]> {

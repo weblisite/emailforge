@@ -117,9 +117,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: 'Access denied' });
       }
 
+      console.log(`🔍 Attempting to delete email account: ${req.params.id}`);
       await storage.deleteEmailAccount(req.params.id);
+      console.log(`✅ Email account deleted successfully: ${req.params.id}`);
       res.json({ message: 'Email account deleted successfully' });
     } catch (error) {
+      console.error(`❌ Failed to delete email account ${req.params.id}:`, error);
       res.status(500).json({ message: 'Failed to delete email account' });
     }
   });

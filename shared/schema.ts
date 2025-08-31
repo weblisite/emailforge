@@ -90,7 +90,7 @@ export const campaignEmails = pgTable("campaign_emails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: varchar("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
   leadId: varchar("lead_id").notNull().references(() => leads.id),
-  emailAccountId: varchar("email_account_id").notNull().references(() => emailAccounts.id),
+  emailAccountId: varchar("email_account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
   sequenceStepId: varchar("sequence_step_id").notNull().references(() => sequenceSteps.id),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -109,7 +109,7 @@ export const campaignEmails = pgTable("campaign_emails", {
 export const inboxMessages = pgTable("inbox_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  emailAccountId: varchar("email_account_id").notNull().references(() => emailAccounts.id),
+  emailAccountId: varchar("email_account_id").notNull().references(() => emailAccounts.id, { onDelete: "cascade" }),
   campaignEmailId: varchar("campaign_email_id").references(() => campaignEmails.id),
   fromEmail: text("from_email").notNull(),
   fromName: text("from_name"),
