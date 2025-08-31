@@ -22,18 +22,41 @@ export class EmailService {
   }
 
   decryptPassword(encryptedPassword: string): string {
-    const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
-    
-    const parts = encryptedPassword.split(':');
-    const iv = Buffer.from(parts[0], 'hex');
-    const encrypted = parts[1];
-    
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
+    try {
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+      
+      // Check if the encrypted password has the expected format (iv:encrypted)
+      if (!encryptedPassword || !encryptedPassword.includes(':')) {
+        throw new Error('Invalid encrypted password format');
+      }
+      
+      const parts = encryptedPassword.split(':');
+      if (parts.length !== 2) {
+        throw new Error('Invalid encrypted password format');
+      }
+      
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+      
+      // Validate IV and encrypted data
+      if (iv.length !== 16) {
+        throw new Error('Invalid initialization vector length');
+      }
+      
+      if (!encrypted || encrypted.length === 0) {
+        throw new Error('Empty encrypted data');
+      }
+      
+      const decipher = crypto.createDecipheriv(algorithm, key, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (error) {
+      console.error('Password decryption failed:', error);
+      throw new Error(`Password decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async testEmailConnection(config: {
@@ -76,7 +99,15 @@ export class EmailService {
   async testEmailAccount(emailAccount: any): Promise<{ success: boolean; error?: string }> {
     try {
       // Decrypt the password
-      const decryptedPassword = this.decryptPassword(emailAccount.encryptedPassword);
+      let decryptedPassword: string;
+      try {
+        decryptedPassword = this.decryptPassword(emailAccount.encryptedPassword);
+      } catch (decryptError) {
+        return { 
+          success: false, 
+          error: `Password decryption failed: ${decryptError instanceof Error ? decryptError.message : 'Unknown error'}` 
+        };
+      }
       
       // Test the connection using the existing method
       const testResult = await this.testEmailConnection({
