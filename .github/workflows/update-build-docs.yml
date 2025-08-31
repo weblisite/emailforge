@@ -1,0 +1,80 @@
+name: 🚀 Auto-Update Build Documentation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'migrations/**'
+      - 'shared/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'migrations/**'
+      - 'shared/**'
+
+jobs:
+  update-build-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🚀 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for git analysis
+    
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: 🔧 Install dependencies
+      run: npm ci
+    
+    - name: 📝 Update BUILD.md
+      run: |
+        node scripts/update-build-docs.js --auto
+        echo "✅ BUILD.md updated successfully"
+    
+    - name: 📊 Generate build summary
+      run: |
+        echo "📋 BUILD STATUS SUMMARY"
+        echo "========================"
+        node scripts/update-build-docs.js --summary
+    
+    - name: 🔍 Check for changes
+      id: check-changes
+      run: |
+        if git diff --quiet BUILD.md; then
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo "📝 No changes detected in BUILD.md"
+        else
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "📝 Changes detected in BUILD.md"
+          git diff BUILD.md
+        fi
+    
+    - name: 📝 Commit BUILD.md changes
+      if: steps.check-changes.outputs.has-changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add BUILD.md
+        git commit -m "docs: Auto-update BUILD.md with current implementation status [skip ci]"
+        git push
+    
+    - name: 🎉 Build docs updated
+      if: steps.check-changes.outputs.has-changes == 'true'
+      run: |
+        echo "🎉 BUILD.md has been automatically updated and committed!"
+        echo "📊 Check the changes in the commit above"
+    
+    - name: ✅ No changes needed
+      if: steps.check-changes.outputs.has-changes == 'false'
+      run: |
+        echo "✅ BUILD.md is already up to date"
+        echo "📊 No changes needed"
