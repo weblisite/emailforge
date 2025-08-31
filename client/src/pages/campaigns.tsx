@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, MoreHorizontal, Play, Pause, Trash2, Eye, Send, Filter, RefreshCw, Share2 } from "lucide-react";
+import { Plus, MoreHorizontal, Play, Pause, Trash2, Eye, Send, Filter, RefreshCw, Share2, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ export default function Campaigns() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [sequenceData, setSequenceData] = useState<any>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [campaignToShare, setCampaignToShare] = useState<Campaign | null>(null);
@@ -221,6 +222,11 @@ export default function Campaigns() {
     setIsViewDetailsOpen(true);
   };
 
+  const handleEdit = (campaign: Campaign) => {
+    setEditingCampaign(campaign);
+    setIsFormOpen(true);
+  };
+
   const handleShareCampaign = (campaign: Campaign) => {
     setCampaignToShare(campaign);
     setIsShareDialogOpen(true);
@@ -247,15 +253,23 @@ export default function Campaigns() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Campaign</DialogTitle>
+              <DialogTitle>{editingCampaign ? 'Edit Campaign' : 'Create Campaign'}</DialogTitle>
               <DialogDescription>
-                Create a new email outreach campaign to send automated email sequences.
+                {editingCampaign ? 'Edit your campaign settings and configuration.' : 'Create a new email outreach campaign to send automated email sequences.'}
               </DialogDescription>
             </DialogHeader>
             <CampaignForm 
-              onSuccess={() => setIsFormOpen(false)}
-              onCancel={() => setIsFormOpen(false)}
+              onSuccess={() => {
+                setIsFormOpen(false);
+                setEditingCampaign(null);
+              }}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingCampaign(null);
+              }}
               sequenceData={sequenceData}
+              initialData={editingCampaign}
+              isEditing={!!editingCampaign}
             />
           </DialogContent>
         </Dialog>
@@ -440,6 +454,14 @@ export default function Campaigns() {
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem 
+                            onClick={() => handleEdit(campaign)}
+                            data-testid={`campaign-edit-${campaign.id}`}
+                            disabled={campaign.status === 'completed'}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
                             onClick={() => handleTogglePause(campaign)}
                             data-testid={`campaign-toggle-${campaign.id}`}
                             disabled={campaign.status === 'completed'}
@@ -509,15 +531,23 @@ export default function Campaigns() {
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Create Campaign</DialogTitle>
+                <DialogTitle>{editingCampaign ? 'Edit Campaign' : 'Create Campaign'}</DialogTitle>
                 <DialogDescription>
-                  Create a new email outreach campaign to send automated email sequences.
+                  {editingCampaign ? 'Edit your campaign settings and configuration.' : 'Create a new email outreach campaign to send automated email sequences.'}
                 </DialogDescription>
               </DialogHeader>
               <CampaignForm 
-                onSuccess={() => setIsFormOpen(false)}
-                onCancel={() => setIsFormOpen(false)}
+                onSuccess={() => {
+                  setIsFormOpen(false);
+                  setEditingCampaign(null);
+                }}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingCampaign(null);
+                }}
                 sequenceData={sequenceData}
+                initialData={editingCampaign}
+                isEditing={!!editingCampaign}
               />
             </DialogContent>
           </Dialog>
