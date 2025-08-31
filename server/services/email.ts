@@ -73,6 +73,25 @@ export class EmailService {
     }
   }
 
+  async testEmailAccount(emailAccount: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Decrypt the password
+      const decryptedPassword = this.decryptPassword(emailAccount.encryptedPassword);
+      
+      // Test the connection using the existing method
+      const testResult = await this.testEmailConnection({
+        smtpHost: emailAccount.smtpHost,
+        smtpPort: emailAccount.smtpPort,
+        username: emailAccount.username,
+        password: decryptedPassword,
+      });
+
+      return testResult;
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Account test failed' };
+    }
+  }
+
   async sendEmail(config: {
     smtpHost: string;
     smtpPort: number;
