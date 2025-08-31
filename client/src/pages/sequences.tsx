@@ -19,6 +19,7 @@ export default function Sequences() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [selectedSequence, setSelectedSequence] = useState<SequenceWithSteps | null>(null);
+  const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -44,6 +45,11 @@ export default function Sequences() {
       });
     },
   });
+
+  const handleEdit = (sequence: Sequence) => {
+    setEditingSequence(sequence);
+    setIsFormOpen(true);
+  };
 
   const handleDelete = (sequence: Sequence) => {
     if (confirm(`Are you sure you want to delete "${sequence.name}"?`)) {
@@ -115,14 +121,22 @@ export default function Sequences() {
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create Email Sequence</DialogTitle>
+              <DialogTitle>{editingSequence ? 'Edit Email Sequence' : 'Create Email Sequence'}</DialogTitle>
               <DialogDescription>
-                Create a new email sequence to automate your outreach campaigns.
+                {editingSequence ? 'Edit your email sequence to update the automation flow.' : 'Create a new email sequence to automate your outreach campaigns.'}
               </DialogDescription>
             </DialogHeader>
             <SequenceForm 
-              onSuccess={() => setIsFormOpen(false)}
-              onCancel={() => setIsFormOpen(false)}
+              onSuccess={() => {
+                setIsFormOpen(false);
+                setEditingSequence(null);
+              }}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingSequence(null);
+              }}
+              initialData={editingSequence}
+              isEditing={!!editingSequence}
             />
           </DialogContent>
         </Dialog>
@@ -238,7 +252,10 @@ export default function Sequences() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem data-testid={`sequence-edit-${sequence.id}`}>
+                      <DropdownMenuItem 
+                        onClick={() => handleEdit(sequence)}
+                        data-testid={`sequence-edit-${sequence.id}`}
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
@@ -313,10 +330,18 @@ export default function Sequences() {
                   Create a new email sequence to automate your outreach campaigns.
                 </DialogDescription>
               </DialogHeader>
-              <SequenceForm 
-                onSuccess={() => setIsFormOpen(false)}
-                onCancel={() => setIsFormOpen(false)}
-              />
+                          <SequenceForm 
+              onSuccess={() => {
+                setIsFormOpen(false);
+                setEditingSequence(null);
+              }}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingSequence(null);
+              }}
+              initialData={editingSequence}
+              isEditing={!!editingSequence}
+            />
             </DialogContent>
           </Dialog>
         </div>
