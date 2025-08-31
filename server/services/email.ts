@@ -103,9 +103,11 @@ export class EmailService {
       try {
         decryptedPassword = this.decryptPassword(emailAccount.encryptedPassword);
       } catch (decryptError) {
+        // If password decryption fails, return a helpful error message
+        // suggesting the user to recreate the email account
         return { 
           success: false, 
-          error: `Password decryption failed: ${decryptError instanceof Error ? decryptError.message : 'Unknown error'}` 
+          error: `Password decryption failed. Please delete and recreate this email account with your current password.` 
         };
       }
       
