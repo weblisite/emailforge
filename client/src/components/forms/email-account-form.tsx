@@ -223,7 +223,18 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
                       type="number"
                       placeholder="50" 
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      value={field.value || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          field.onChange(null);
+                        } else {
+                          const parsed = parseInt(value);
+                          if (!isNaN(parsed)) {
+                            field.onChange(parsed);
+                          }
+                        }
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -266,7 +277,18 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
                       type="number"
                       placeholder="587" 
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      value={field.value || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          field.onChange(null);
+                        } else {
+                          const parsed = parseInt(value);
+                          if (!isNaN(parsed)) {
+                            field.onChange(parsed);
+                          }
+                        }
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -309,7 +331,18 @@ export default function EmailAccountForm({ onSuccess, onCancel, initialData, isE
                       type="number"
                       placeholder="993" 
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      value={field.value || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          field.onChange(null);
+                        } else {
+                          const parsed = parseInt(value);
+                          if (!isNaN(parsed)) {
+                            field.onChange(parsed);
+                          }
+                        }
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
