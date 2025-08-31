@@ -120,6 +120,28 @@ export default function EmailAccounts() {
             Manage your SMTP/IMAP email account connections
           </p>
         </div>
+        
+        {/* Always show Add Email Account button */}
+        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-email-account">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Email Account
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Add Email Account</DialogTitle>
+              <DialogDescription>
+                Add a new email account to enable sending campaigns.
+              </DialogDescription>
+            </DialogHeader>
+            <EmailAccountForm 
+              onSuccess={() => setIsFormOpen(false)}
+              onCancel={() => setIsFormOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Accounts Grid */}
@@ -221,29 +243,9 @@ export default function EmailAccounts() {
             <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
             <h4>No Email Accounts</h4>
             <p className="text-muted-foreground">
-              Add your first email account to start sending campaigns.
+              Use the "Add Email Account" button above to add your first email account and start sending campaigns.
             </p>
           </div>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-first-account">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Your First Account
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl">
-              <DialogHeader>
-                <DialogTitle>Add Email Account</DialogTitle>
-                <DialogDescription>
-                  Add a new email account to enable sending campaigns.
-                </DialogDescription>
-              </DialogHeader>
-              <EmailAccountForm 
-                onSuccess={() => setIsFormOpen(false)}
-                onCancel={() => setIsFormOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
         </div>
       )}
 
